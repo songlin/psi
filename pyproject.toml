@@ -1,0 +1,79 @@
+[project]
+name = "psi"
+version = "0.0.0"
+description = "Psi: towards humanoid foundation model"
+readme = "README.md"
+requires-python = "==3.10.*"
+dependencies = [
+    "albumentations==1.4.18",
+    "datasets>=4.1.0",
+    "dm-tree==0.1.8",
+    "einops==0.8.1",
+    "einx>=0.3.0",
+    "h5py==3.14.0",
+    "imageio==2.34.2",
+    "jsonlines>=4.0.0",
+    "numpy<2.0.0",
+    "numpydantic==1.6.7",
+    "omegaconf>=2.3.0",
+    "opencv-python",
+    "plotly==6.2.0",
+    "pydantic==2.10.6",
+    "pydantic-yaml>=1.6.0",
+    "tqdm==4.67.1",
+    "typer>=0.19.1",
+    "tyro==0.9.32",
+    "vuer[all]>=0.0.68",
+    "wandb==0.18.0",
+    "simplejpeg>=1.9.0",
+    "dotenv",
+    "gdown>=5.2.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+psi = ["assets/*"]
+
+[tool.uv.sources]
+psi = { path = ".", editable = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+serve = [
+    "fastapi",
+    "uvicorn",
+]
+
+viz = [
+    "transforms3d>=0.4.2",
+    "vuer[all]>=0.0.68",
+    "viser>=1.0.15",
+    #"pin>=3.8.0",
+    #"numpy<2.0.0",
+]
+
+psi = [
+    "torch==2.6.0",
+    "torchvision==0.21.0",
+    "torchcodec==0.2.1",
+    "transformers==4.57.0",
+    "deepspeed==0.17.1",
+    "flash_attn==2.7.4.post1",
+    "triton==3.2.0",
+    "accelerate==1.7.0",
+    "peft==0.17.1",
+    "qwen-vl-utils==0.0.14",
+    "sentencepiece",
+    "lerobot @ git+https://github.com/huggingface/lerobot.git@f39652707caed42a7cd5ab36066da5663b9565eb"
+]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = [{ requirement = "torch", match-runtime = true }]
+
+[project.scripts]
+serve_psi0 = "we.deploy.psi0_serve_simple:main"
