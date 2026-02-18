@@ -76,4 +76,4 @@ psi = [
 flash-attn = [{ requirement = "torch", match-runtime = true }]
 
 [project.scripts]
-serve_psi0 = "we.deploy.psi0_serve_simple:main"
+serve_psi0 = "psi.deploy.psi0_serve_simple:main"
