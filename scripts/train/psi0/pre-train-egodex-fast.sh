@@ -17,6 +17,7 @@ data.transform.action-state:maxmin \
 data.transform.model:hfm \
 model:hfm-qwen3vl \
 model.action-tokenizer:fast \
+--debug \
 --seed=7 \
 --exp=pre \
 --timestamp=$(date +"%y%m%d%H%M") \
@@ -46,7 +47,7 @@ model.action-tokenizer:fast \
 --data.transform.action-state.stat-action-key=egodex \
 --data.transform.action-state.stat-path=assets/stats/egodex_stat_all.json \
 --data.transform.model.resize.size 270 480 \
---data.root-dir=/lustre/fs12/portfolios/nvr/projects/nvr_av_foundations/datasets/ego-dex \
+--data.root-dir=/hfm/data/egodex \
 --data.use-delta-actions \
 --data.transform.model.no-img-aug \
 --model.action_tokenizer.bins=2048 \

@@ -21,7 +21,7 @@ a version number will be displayed.
 uv venv .venv-psi --python 3.10
 source .venv-psi/bin/activate
 cp envs/uv.lock.psi0 uv.lock
-GIT_LFS_SKIP_SMUDGE=1  uv sync --all-groups --index-strategy unsafe-best-match --active
+GIT_LFS_SKIP_SMUDGE=1  uv sync --all-groups --index-strategy unsafe-best-match  --frozen --active
 ```
 
 Test installation:

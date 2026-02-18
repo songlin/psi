@@ -348,7 +348,13 @@ class HfmTrainer(Qwen3vlMixin, Trainer):
             # Images are assumed to have same shape and 3 channels; concat directly
             concat_img = np.concatenate(img_arrays, axis=1)
             wandb.log({"raw_images": [wandb.Image(concat_img, caption=f"raw images {self.global_step}")]}, step=self.global_step)
-
+        print({
+            "loss": loss.item(),
+            "action_accuracy": action_accuracy.item(),
+            "action_l1_loss": action_l1_loss.item(),
+            "lr": self.lr_scheduler.get_last_lr()[0],
+        })
+        exit(0)
         return self.accelerator.sync_gradients, {
             "loss": loss.item(),
             "action_accuracy": action_accuracy.item(),
