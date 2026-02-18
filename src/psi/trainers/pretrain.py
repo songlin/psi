@@ -12,10 +12,10 @@ from accelerate import Accelerator
 from psi.trainers import Trainer,worker_init_fn
 if TYPE_CHECKING:
     from psi.config.config import LaunchConfig
-    from psi.config.model import Hfm_Qwen3VL_ModelConfig
-    from psi.config.data import EgoDexDataConfig
-    from psi.config.data import HEDataConfig
-    from psi.config.data import MixedDataConfig
+    from psi.config.model_qwen3vl import Qwen3VL_ModelConfig
+    from psi.config.data_egodex import EgoDexDataConfig
+    # from psi.config.data import HEDataConfig
+    # from psi.config.data import MixedDataConfig
 
 from psi.utils import initialize_overwatch, shorten, seed_everything, flatten
 overwatch = initialize_overwatch(__name__)
@@ -27,11 +27,11 @@ from psi.config.tokenizer import FastActionTokenizerConfig, VQActionTokenizerCon
 from psi.trainers.qwen3vl_mixin import Qwen3vlMixin, PaddedCollatorForActionPrediction
 from psi.utils import move_to_device
 
-class HfmTrainer(Qwen3vlMixin, Trainer):
+class PretrainTrainer(Qwen3vlMixin, Trainer):
 
     def __init__(self, cfg: LaunchConfig, device: torch.device):
         super().__init__(cfg, device)
-        overwatch.info("Initialized HFM Trainer")
+        overwatch.info("Initialized Pretrain Trainer")
         self.Da = 48 # action dimension
         self._grad_norm_vlm = None
         self.maxmin = self.data_cfg.transform.action_state
@@ -51,7 +51,7 @@ class HfmTrainer(Qwen3vlMixin, Trainer):
         )
     
     @property
-    def model_cfg(self) -> Hfm_Qwen3VL_ModelConfig:
+    def model_cfg(self) -> Qwen3VL_ModelConfig:
         return self.cfg.model  # type: ignore
     
     @property

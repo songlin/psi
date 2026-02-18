@@ -13,6 +13,7 @@ import json
 import datetime
 import sys
 import tyro
+import importlib
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from psi.config.config import LaunchConfig
@@ -322,8 +323,6 @@ def _is_slurm_job_process() -> bool:
     return "SLURM_JOB_ID" in os.environ and not os.isatty(sys.stdout.fileno())
 
 if __name__ == "__main__":
-    from psi.config.dynamic import dynamic_tyro_args, parse_data_config_args, create_dynamic_config_class
-
     if _is_slurm_job_process():
         overwatch.info("SLURM job detected. Setting up distributed environment variables...")
         os.environ["LOCAL_WORLD_SIZE"] = str(
@@ -356,23 +355,21 @@ if __name__ == "__main__":
 
     start = datetime.datetime.now()
     overwatch.info("Parsing configuration...")
-    
-    # Caution: HACK allow only rank 0 to rewrite the config file
-    # But this is not a strictly synchonized operation across all processes
-    # Best practice: launch the script twice, first to generate the latest config file, second to use it
-    force_rewrite_config_file = os.environ.get("RANK", "not set") == "0"
-    # dynamic Parse tyro config (as opposed to static typo parsing which takes over 2 minutes)
-    dynamic_types, DataConfigClass, argv = dynamic_tyro_args(force_rewrite_config_file)
-    
-    # parse data config seperately
-    args_data, argv = parse_data_config_args(argv)
-    model_type = dynamic_types.get("model", "dummy")
-
-    # create dynamic config class 
-    DynamicConfig = create_dynamic_config_class(model_type, DataConfigClass)
-    config = tyro.cli(DynamicConfig, config=(tyro.conf.ConsolidateSubcommandArgs,), args=argv[1:]+args_data)
+    try:
+        # By convention, the first argument after the script name is the config module name, 
+        # eg., {trainer}_{data}_{model}_config, which corresponds to psi.config.train.pretrain_egodex_qwen3vl_config
+        module = importlib.import_module(f"psi.config.train.{sys.argv[1]}")
+        DynamicLaunchConfigClass =  getattr(module, "DynamicLaunchConfig")
+        config = tyro.cli(DynamicLaunchConfigClass, config=(tyro.conf.ConsolidateSubcommandArgs,), args=sys.argv[2:])
+    except Exception as e:
+        overwatch.error(f"Failed to import config module 'psi.config.train.{sys.argv[1]}'")
+        raise e
 
     end = datetime.datetime.now()
-    overwatch.info(f"Config parsing took {(end - start).total_seconds():.2f}s")
+    overwatch.info(f"Config parsing took {(end - start).total_seconds():.2f}s") 
 
+    # with open(f"run_config.json", "w") as f:
+    #     f.write(config.model_dump_json(indent=4))
+    # exit(0)
+    
     train(config) # type: ignore

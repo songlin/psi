@@ -11,17 +11,13 @@ export CUDA_VISIBLE_DEVICES="0,1"
 NNODES=1
 NPROC_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 
-args="data:egodex \
-data.transform.repack:egodex \
-data.transform.action-state:maxmin \
-data.transform.model:hfm \
-model:hfm-qwen3vl \
+args="pretrain_egodex_qwen3vl_config \
 model.action-tokenizer:fast \
 --debug \
 --seed=7 \
 --exp=pre \
 --timestamp=$(date +"%y%m%d%H%M") \
---train.name=hfm \
+--train.name=pretrain \
 --train.data_parallel=deepspeed \
 --train.deepspeed_config=scripts/deepspeed/zero3.json \
 --train.mixed_precision=bf16 \

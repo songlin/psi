@@ -8,11 +8,6 @@ from typing import Union, Any, TYPE_CHECKING
 from tyro.conf import subcommand as cmd
 from pathlib import Path
 import datetime
-from psi.config import data as wd
-from psi.config import model as wm
-
-if TYPE_CHECKING:
-    from .tokenizer import VQVaeActionTokenizerConfig
 
 class LoggingConfig(BaseModel):
     logging_dir: str = "logs"
@@ -145,37 +140,45 @@ class LaunchConfig(BaseModel):
     log: LoggingConfig
     wandb: WandbConfig
     train: TrainConfig
-    # fmt: off
-    data: Union[
-        Annotated[wd.DummyDataConfig, cmd("dummy")],
-        Annotated[wd.EgoDexDataConfig, cmd("egodex")],
-        Annotated[wd.RLDSDataConfig, cmd("rlds")],
-        Annotated[wd.LerobotDataConfig, cmd("lerobot")],
-        Annotated[wd.PushTDataConfig, cmd("pusht")],
-        Annotated[wd.HumanoidDataConfig, cmd("humanoid")],
-        Annotated[wd.HEDataConfig, cmd("humanoideveryday")],
-        Annotated[wd.HERawDataConfig, cmd("humanoideveryday-raw")],
-        Annotated[wd.HRDTDataConfig, cmd("hrdt")],
-        Annotated[wd.VLMDataConfig, cmd("toy-vlm")],
-        Annotated[wd.GR00TDataConfig, cmd("gr00t")],
-        Annotated[wd.MixedDataConfig, cmd("mixed")],
-        Annotated[wd.SimpleDataConfig, cmd("simple")]
-    ]
-    model: Union[
-        Annotated[wm.DummyModelConfig, cmd("dummy")],
-        Annotated[wm.InternVLA_M1_ModelConfig, cmd("internvla")],
-        Annotated[wm.Qwen25VL_ModelConfig, cmd("qwen25vl")],
-        Annotated[wm.OpenVLA_Qwenvl_ModelConfig, cmd("openvla_qwenvl")],
-        Annotated[wm.OpenVLA_ModelConfig, cmd("openvla")],
-        # Annotated[wm.VQVaeActionTokenizerConfig, cmd("vqvae")],
-        Annotated[wm.OpenVLA_Flow_ModelConfig, cmd("openvla-flow")],
-        Annotated[wm.DitPolicy_ModelConfig, cmd("ditp")],
-        Annotated[wm.Vlt_ModelConfig, cmd("vlt")],
-        Annotated[wm.DiffusionPolicy_ModelConfig, cmd("dp")],
-        Annotated[wm.Hfm_Qwen3VL_ModelConfig, cmd("hfm-qwen3vl")],
-        Annotated[wm.Qwen3vl_ModelConfig, cmd("qwen3vl")],
-        Annotated[wm.Qwen3vl_7d_ModelConfig, cmd("qwen3vl-7d")],
-        Annotated[wm.Hfm_Action_ModelConfig, cmd("hfm-action")],
-        Annotated[wm.Together_ModelConfig, cmd("hfm-together")]
-    ]
-    # fmt: on
+    
+    def model_post_init(self, __context: Any) -> None:
+        is_multinode = (
+            "SLURM_NODELIST" in os.environ and
+            len(os.environ["SLURM_NODELIST"].split(",")) > 1
+        )
+        if is_multinode:
+            assert self.timestamp is not None, "Timestamp must be provided for multi-node training, eg., --timestamp=$(date +\"%y%m%d%H%M\")"
+
+        def extract_timestamp(folder_name):
+            parts = folder_name.split('.')
+            return parts[-1] if len(parts) > 1 else ''
+
+        if self.train.resume_from_checkpoint == "latest":
+            """ auto resume by looking up timestamp or latest run folder """
+            auto_resume_success = False
+            trainer_dir = os.path.join(self.train.output_dir, self.train.name)
+            if os.path.exists(trainer_dir):
+                # Sort folders by timestamp (assumed to be last part after a dot)
+                runs = dict(sorted({
+                    extract_timestamp(f): os.path.join(trainer_dir, f) for f in os.listdir(trainer_dir)
+                }.items(), reverse=True))
+
+                if self.timestamp is not None and self.timestamp in runs:
+                    print(f"Will resume latest run with specified timestamp: {self.timestamp}")
+                    self.train.resume_from_checkpoint = runs[self.timestamp]
+                    auto_resume_success = True
+
+                """ elif len(runs) > 0:
+                    latest_timestamp = next(iter(runs))
+                    print(f"Will auto-resume from latest run with timestamp: {latest_timestamp}")
+                    if self.timestamp is not None and self.timestamp != latest_timestamp:
+                        print(f"Overriding timestamp {self.timestamp} with latest timestamp {latest_timestamp}")
+                    self.timestamp = latest_timestamp
+                    self.train.resume_from_checkpoint = runs[latest_timestamp]
+                    auto_resume_success = True """
+            
+            if not auto_resume_success:
+                self.train.resume_from_checkpoint = None
+
+        if self.timestamp is None:
+            self.timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
