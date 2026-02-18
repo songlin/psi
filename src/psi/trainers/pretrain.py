@@ -14,16 +14,13 @@ if TYPE_CHECKING:
     from psi.config.config import LaunchConfig
     from psi.config.model_qwen3vl import Qwen3VL_ModelConfig
     from psi.config.data_egodex import EgoDexDataConfig
-    # from psi.config.data import HEDataConfig
-    # from psi.config.data import MixedDataConfig
 
-from psi.utils import initialize_overwatch, shorten, seed_everything, flatten
+from psi.utils import initialize_overwatch, shorten, flatten
 overwatch = initialize_overwatch(__name__)
 
-# from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, AutoTokenizer
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from psi.tokenizer import FastActionTokenizer, VQActionTokenizer, TextActionTokenizer
-from psi.config.tokenizer import FastActionTokenizerConfig, VQActionTokenizerConfig, TextActionTokenizerConfig
+from psi.tokenizer import FastActionTokenizer
+from psi.config.tokenizer import FastActionTokenizerConfig
 from psi.trainers.qwen3vl_mixin import Qwen3vlMixin, PaddedCollatorForActionPrediction
 from psi.utils import move_to_device
 
@@ -77,8 +74,6 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         if not "Mixed" in self.data_cfg.__class__.__name__:
             # dont prepare dataloader for mixed dataset as custom sampler is used
             self.train_dataloader = accelerator.prepare(self.train_dataloader)
-        else:
-            ...
 
         return self.prepare_qwen3vl(accelerator) # type: ignore
 
@@ -116,10 +111,6 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
                 pretrained_checkpoint=self.model_cfg.action_tokenizer.pretrained_checkpoint or "physical-intelligence/fast",
                 bins=self.model_cfg.action_tokenizer.bins
             )
-        elif isinstance(self.model_cfg.action_tokenizer, VQActionTokenizerConfig):
-            self.action_tokenizer = VQActionTokenizer(self.tokenizer, vq_vae_path = self.model_cfg.action_tokenizer.pretrained_checkpoint)
-        elif isinstance(self.model_cfg.action_tokenizer, TextActionTokenizerConfig):
-            self.action_tokenizer = TextActionTokenizer(self.tokenizer, self.data_cfg.chunk_size, self.Da)
         else:
             raise NotImplementedError
         
@@ -166,7 +157,6 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             g = torch.Generator()
             g.manual_seed(self.cfg.seed or 42)
 
-        # myinit_fn = partial(worker_init_fn, seed=self.cfg.seed)
         collator = PaddedCollatorForActionPrediction(
             model_max_length=self.tokenizer.model_max_length,
             pad_token_id=self.tokenizer.pad_token_id,
@@ -199,14 +189,11 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
 
     def training_step(
         self,
-        # model: nn.Module,
         batch: dict[str, torch.Tensor | Any],
     ) -> tuple[bool, dict[str, Any]]:
-        # assert self.train_cfg.data_parallel == "deepspeed", "gradient accumulation is configured by deepspeed"
         
         with self.accelerator.autocast():
             batch = move_to_device(batch, self.device) # type: ignore
-            # output = self.model(**batch)
             output: CausalLMOutputWithPast = self.model(
                 input_ids=batch["input_ids"],
                 attention_mask=batch["attention_mask"],
@@ -244,13 +231,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
 
         # Compute Accuracy
         correct = (action_preds == action_gt) & mask
-        action_accuracy = correct.sum().float() / mask.sum().float()#.clamp(min=1.0) # clamping to avoid divison by 0
-
-        # print("raw_action:", batch["raw_action"])
-        # print("action_str:", self.action_tokenizer(batch["raw_action"].cpu().numpy()))
-        # print("action preds:",action_preds)
-        # print("action_gt:",action_gt)
-        # print("action accuracy:", action_accuracy.item())
+        action_accuracy = correct.sum().float() / mask.sum().float()
 
         if isinstance(self.model_cfg.action_tokenizer, FastActionTokenizerConfig) or \
             isinstance(self.model_cfg.action_tokenizer, TextActionTokenizerConfig):
@@ -264,10 +245,6 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             action_preds_token_ids = action_preds[mask].cpu().numpy() # type: ignore
             action_gt_token_ids = action_gt[mask].cpu().numpy() # type: ignore
         
-        # print("action gt token ids:", action_gt_token_ids)
-        # print("action pred token ids:", action_preds_token_ids)
-
-        
         continuous_actions_pred = torch.tensor(
             self.action_tokenizer.decode_token_ids_to_actions(action_preds_token_ids), # type: ignore
             dtype=torch.float32
@@ -277,52 +254,9 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             dtype=torch.float32
         )
 
-        # # print("continuous actions pred:", continuous_actions_pred)
-        # # print("continuous actions gt:", continuous_actions_gt)
-
-        # # overwatch.info(f"{continuous_actions_pred.shape=}, {continuous_actions_gt.shape=}")
-
-        # action_l1_loss = torch.nn.functional.l1_loss(
-        #     continuous_actions_pred, continuous_actions_gt
-        # )
-
         denorm_action_pred = self.maxmin.denormalize(continuous_actions_pred) # type:ignore
         denorm_action_gt = self.maxmin.denormalize(continuous_actions_gt) # type:ignore
         action_l1_loss = torch.abs(denorm_action_pred-denorm_action_gt).mean() # type:ignore
-
-        # mask_start = self.action_tokenizer.action_token_begin_idx
-        # mask_end = mask_start + self.action_tokenizer.n_bins
-
-        # valid_mask = (
-        #     (action_preds_token_ids >= mask_start)
-        #     & (action_preds_token_ids < mask_end)
-        # ).all(dim=1)
-
-        # if valid_mask.any():
-        #     pred_valid = action_preds_token_ids[valid_mask]
-        #     gt_valid = action_gt_token_ids[valid_mask]
-
-        #     continuous_actions_pred = torch.tensor(
-        #         self.action_tokenizer.decode_token_ids_to_actions(pred_valid)
-        #     )
-        #     continuous_actions_gt = torch.tensor(
-        #         self.action_tokenizer.decode_token_ids_to_actions(gt_valid)
-        #     )
-
-        #     diffs = torch.nn.functional.l1_loss(
-        #         continuous_actions_pred,
-        #         continuous_actions_gt
-        #     ).mean(dim=1)
-
-        #     loss_valid = diffs
-        #     loss_invalid = torch.full(
-        #         (len(valid_mask) - len(loss_valid),),
-        #         100.0
-        #     )
-        #     action_l1_loss = torch.cat([loss_valid, loss_invalid]).mean()
-        # else:
-        #     action_l1_loss = torch.tensor(100.0)
-
 
         self.optimizer.step()
         self.lr_scheduler.step()
@@ -348,13 +282,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             # Images are assumed to have same shape and 3 channels; concat directly
             concat_img = np.concatenate(img_arrays, axis=1)
             wandb.log({"raw_images": [wandb.Image(concat_img, caption=f"raw images {self.global_step}")]}, step=self.global_step)
-        print({
-            "loss": loss.item(),
-            "action_accuracy": action_accuracy.item(),
-            "action_l1_loss": action_l1_loss.item(),
-            "lr": self.lr_scheduler.get_last_lr()[0],
-        })
-        exit(0)
+
         return self.accelerator.sync_gradients, {
             "loss": loss.item(),
             "action_accuracy": action_accuracy.item(),

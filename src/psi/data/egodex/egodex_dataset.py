@@ -556,15 +556,16 @@ class EgoDexDataset:
 
     def __getitem__(self, idx):
         """PyTorch Dataset interface"""
-        print(f"egodex dataset __getitem__ called with idx={idx}")
-        """PyTorch Dataset interface"""
-        if not os.path.exists(f"tmp/{idx}.pkl"):
-            print(f"missing {idx}.pkl, regenerating")
-            data = self.get_item(idx)
-            pickle.dump(data, open(f"tmp/{idx}.pkl", "wb"))
-        else:
-            data = pickle.load(open(f"tmp/{idx}.pkl", "rb"))
-        return data
+        # print(f"egodex dataset __getitem__ called with idx={idx}")
+        # """PyTorch Dataset interface"""
+        # if not os.path.exists(f"tmp/{idx}.pkl"):
+        #     print(f"missing {idx}.pkl, regenerating")
+        #     data = self.get_item(idx)
+        #     pickle.dump(data, open(f"tmp/{idx}.pkl", "wb"))
+        # else:
+        #     data = pickle.load(open(f"tmp/{idx}.pkl", "rb"))
+        # return data
+        return self.get_item(idx)
 
 
 if __name__ == "__main__":

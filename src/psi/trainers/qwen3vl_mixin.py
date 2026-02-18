@@ -1,12 +1,10 @@
-# pyright: reportGeneralTypeIssues=false
-# type: ignore
 from typing import TYPE_CHECKING, Any, List, cast
 import re
 import torch
 import torch.nn as nn
 import numpy as np
 if TYPE_CHECKING:
-    from psi.learn.trainers import Trainer
+    from psi.trainers import Trainer
 
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, Qwen2TokenizerFast, Qwen3VLProcessor
 from accelerate import Accelerator

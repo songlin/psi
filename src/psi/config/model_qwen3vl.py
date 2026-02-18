@@ -39,5 +39,4 @@ class Qwen3VL_ModelConfig(ModelConfig):
         Annotated[VQActionTokenizerConfig, cmd("vq")],
         Annotated[TextActionTokenizerConfig, cmd("text")],
     ]
-    # action_tokenizer: FastActionTokenizerConfig
     deepspeed: str = "scripts/deepspeed/zero3.json"  # DeepSpeed configuration name

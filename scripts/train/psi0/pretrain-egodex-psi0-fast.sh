@@ -13,7 +13,6 @@ NPROC_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 
 args="pretrain_egodex_qwen3vl_config \
 model.action-tokenizer:fast \
---debug \
 --seed=7 \
 --exp=pre \
 --timestamp=$(date +"%y%m%d%H%M") \
