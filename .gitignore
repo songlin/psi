@@ -47,5 +47,4 @@ src/fast/egodex-*
 !src/fast/egodex-rel-50w-1x48-v2048-s100
 
 .deepspeed_env
-uv.lock
 *.bak
