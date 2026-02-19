@@ -11,7 +11,7 @@ import contextlib
 import torch.nn.functional as F
 from typing import Dict, Optional, List, Union, Any, TYPE_CHECKING
 from torch.utils.data import DataLoader
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, Qwen2TokenizerFast, Qwen3VLProcessor
+from transformers import Qwen3VLForConditionalGeneration, AutoProcessor #, Qwen2TokenizerFast, Qwen3VLProcessor
 from psi.trainers.qwen3vl_mixin import PaddedCollatorForTogether
 
 if TYPE_CHECKING:    
@@ -37,7 +37,7 @@ overwatch = initialize_overwatch(__name__)
 from .trainer import Trainer, worker_init_fn
 
 from psi.utils import flatten, shorten, move_to_device, rmse, seed_everything
-from psi.models.psi0 import HumanFoundationTogetherModel
+from psi.models.psi0 import Psi0Model
 
 class PosttrainTrainer(Trainer):
 
@@ -99,31 +99,17 @@ class PosttrainTrainer(Trainer):
             dtype=torch.bfloat16
         )
 
-        if self.model_cfg.vlm_run_dir is not None:
-            assert False, "SHOULD NOT HAPPEN ANYMORE"
-            # load pretrained vlm ckpt
-            from safetensors.torch import load_file
-            ckpt_path = f"{self.model_cfg.vlm_run_dir}/checkpoints/ckpt_{self.model_cfg.vlm_ckpt_step}/model.safetensors"
-            state_dict = load_file(ckpt_path)
-            overwatch.info(f"Loading model checkpoint from {ckpt_path}")
-            # state_dict["lm_head.weight"] = state_dict["model.language_model.embed_tokens.weight"] # hack for '_tied_weights_keys = ["lm_head.weight"]'
-            state_dict["model.language_model.embed_tokens.weight"] = state_dict["lm_head.weight"] # hack for '_tied_weights_keys = ["lm_head.weight"]'
-            vlm_model.load_state_dict(state_dict)
-            # vlm_model.eval()
-            overwatch.info("loaded model checkpoint successfully.")
-
         self.vlm_processor = AutoProcessor.from_pretrained(self.model_cfg.model_name_or_path)
         self.tokenizer = self.vlm_processor.tokenizer
 
         assert self.cfg.train.lora == False
-
         return vlm_model
 
     def init_models(self):
         # init pretrained vlm
         vlm_model = self.init_qwen3vl_models()
 
-        self.model = HumanFoundationTogetherModel(
+        self.model = Psi0Model(
             model_cfg=self.model_cfg,
             vlm_model=vlm_model,
             # dtype=self.dtype
@@ -307,11 +293,9 @@ class PosttrainTrainer(Trainer):
         # self.model.action_header.to(torch.float32) # HACK keep action header in fp32
         # print("L307", self.model.module.action_header.time_ins_embed.out_net[0].weight.dtype) # debug
 
-        if not "Mixed" in self.data_cfg.__class__.__name__:
+        if not (hasattr(self.data_cfg, "sampler") and self.data_cfg.sampler is not None) :
             # dont prepare dataloader for mixed dataset as custom sampler is used
             self.train_dataloader = accelerator.prepare(self.train_dataloader)
-        else:
-            ...
 
         if self.train_cfg.data_parallel == "deepspeed":
             # Gradient Checkpoint Setup

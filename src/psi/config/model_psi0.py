@@ -65,7 +65,7 @@ class Psi0ModelConfig(ModelConfig):
 
     # Core Arguments
     model_name_or_path: str = "Qwen/Qwen3-VL-2B-Instruct"  # First load, for initalization
-    vlm_run_dir: str | None = None
+    # vlm_run_dir: str | None = None
     vlm_ckpt_step: str | None = None
     tune_vlm: bool = False
 

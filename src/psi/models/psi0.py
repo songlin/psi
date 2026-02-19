@@ -1475,7 +1475,7 @@ class HumanFoundationModel(nn.Module):
     
 
 
-class HumanFoundationTogetherModel(nn.Module):
+class Psi0Model(nn.Module):
 
     def __init__(self, model_cfg, vlm_model: Qwen3VLForConditionalGeneration):
         super().__init__()
@@ -1542,7 +1542,7 @@ class HumanFoundationTogetherModel(nn.Module):
         overwatch.info("loaded vlm_backbone checkpoint successfully.")
 
         # init hfm-together model with vlm backbone
-        model = HumanFoundationTogetherModel(
+        model = Psi0Model(
             model_cfg=launch_config.model,
             vlm_model = vlm_model,
         )

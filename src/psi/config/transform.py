@@ -857,10 +857,6 @@ class Psi0ModelTransform(ModelTransform):
         inputs: dict = self.build_qwenvl_inputs(
             vlm_processor, images, instruction,
         ) # type: ignore
-        # labels = copy.deepcopy(inputs["input_ids"])
-        # keep loss on the answer + EOS + formatting tokens
-        # labels[:, : -(num_action_tokens + 2)] = IGNORE_INDEX 
-        # inputs["labels"] = labels
         inputs["dataset_name"] = data.get("dataset", "unknown")
         inputs["raw_actions"] = data["raw_actions"]
         if "actions_mask" in data:
@@ -885,22 +881,10 @@ class Psi0ModelTransform(ModelTransform):
 
         """adapted from Qwen_VL_Interface.build_qwenvl_inputs"""
         messages = []
-        # num_answer_tokens_list = []
-
-        # raw_action_tokens = vlm_processor.tokenizer(tokenized_action)["input_ids"]
-        # num_answer_tokens = len(raw_action_tokens)
-        # num_answer_tokens_list.append(num_answer_tokens)
 
         content = [{"type": "image", "image": img} for img in imgs]
         content.append({"type": "text", "text": instruction})
         user_msg = {"role": "user", "content": content}
-
-        # assistant_msg = {
-        #     "role": "assistant",
-        #     "content": [
-        #         {"type": "text", "text": "!"} # HACK: use ! as action placeholder
-        #     ],  # squeeze batch dim
-        # }
         messages.append([user_msg])
 
         # Prepare text prompts using processor
@@ -919,18 +903,4 @@ class Psi0ModelTransform(ModelTransform):
             padding=True,
             return_tensors="pt",
         )
-        # HACK replace "!" token with action tokens
-        # exclamation_token_id = vlm_processor.tokenizer.convert_tokens_to_ids("!")
-        # device = inputs["input_ids"].device
-        # assert torch.all(inputs["input_ids"][:, -3] == exclamation_token_id)
-        # inputs["input_ids"] = torch.concat([
-        #     inputs["input_ids"][:, :-3], 
-        #     torch.tensor([tokenized_action], device=device).repeat(inputs["input_ids"].shape[0], 1),
-        #     inputs["input_ids"][:, -2:]
-        # ], dim=1)
-        # inputs["attention_mask"] = torch.concat([
-        #     inputs["attention_mask"][:, :-3], 
-        #     torch.ones((inputs["attention_mask"].shape[0], len(tokenized_action)), device=device),
-        #     inputs["attention_mask"][:, -2:]
-        # ], dim=1)
         return inputs
