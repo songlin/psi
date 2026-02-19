@@ -13,8 +13,6 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-a version number will be displayed.
-
 ## Install Psi0
 
 ```
@@ -29,6 +27,7 @@ Test installation:
 source .venv-psi/bin/activate
 python -c "import psi;print(psi.__version__)"
 ```
+a version number will be displayed.
 
 ## Pre-Training
 

@@ -185,7 +185,8 @@ class EgoDexDataset:
         # require_image=True,
         viz=False,
         use_delta_actions=False,
-        load_retarget=False
+        load_retarget=False,
+        data_downsample=1,
     ):
         """
         Args:
@@ -207,6 +208,7 @@ class EgoDexDataset:
         self.chunk_size = chunk_size
         # self.state_dim = 48
         self.img_history_size = img_history_size
+        self.data_downsample = data_downsample
 
         # Load data file list
         self.data_files = self._load_file_list()
@@ -253,7 +255,7 @@ class EgoDexDataset:
                         part_files = self._scan_directory(part_dir)
                         with open(cache_file, "wb") as f:
                             pickle.dump(part_files, f)
-                    data_files.extend(part_files)
+                    data_files.extend(part_files[::self.data_downsample])  # ablation: use 10% of egodex data for pretraining
         else:
             # Test set: test
             test_dir = self.data_root / "test"
@@ -272,7 +274,7 @@ class EgoDexDataset:
                     test_files = self._scan_directory(test_dir)
                     with open(cache_file, "wb") as f:
                         pickle.dump(test_files, f)
-                data_files.extend(test_files)
+                data_files.extend(test_files[::self.data_downsample]) # ablation: use 10% of egodex data for pretraining
 
         return data_files
 

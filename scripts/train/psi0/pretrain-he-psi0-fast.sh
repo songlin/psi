@@ -59,41 +59,5 @@ model.action-tokenizer:fast \
 --model.vision_tower_lr=1e-5
 "
 
-# Find an available TCP port starting at 29500 and increment until a free port is found.
-find_free_port() {
-    start_port=${1:-29500}
-    port=${start_port}
-    while true; do
-        # Use Python socket bind test; binding to 0.0.0.0:port will fail if port is in use.
-        CHECK_PORT=${port} python - <<'PY'
-import os,sys,socket
-port = int(os.environ.get('CHECK_PORT','0'))
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    sock.bind(('0.0.0.0', port))
-    sock.close()
-    sys.exit(0)
-except OSError:
-    sys.exit(1)
-PY
-        if [ $? -eq 0 ]; then
-            echo ${port}
-            return 0
-        fi
-        port=$((port+1))
-        # avoid infinite loop in pathological cases
-        if [ ${port} -gt $((start_port+1000)) ]; then
-            echo "Failed to find free port after 1000 attempts" >&2
-            return 1
-        fi
-    done
-}
-
-MAIN_PORT=$(find_free_port 29500)
-if [ -z "${MAIN_PORT}" ]; then
-    echo "Could not find free main process port, aborting." >&2
-    exit 1
-fi
-
-torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=${MAIN_PORT} scripts/train.py \
+torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=29500 scripts/train.py \
     ${args}

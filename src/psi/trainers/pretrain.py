@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from psi.config.model_qwen3vl import Qwen3VLModelConfig
     from psi.config.data_egodex import EgoDexDataConfig
     from psi.config.data_he import HERawDataConfig
+    from psi.config.data_mix import MixedDataConfig
 
 from psi.utils import initialize_overwatch, shorten, flatten
 overwatch = initialize_overwatch(__name__)
@@ -53,7 +54,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         return self.cfg.model  # type: ignore
     
     @property
-    def data_cfg(self) -> EgoDexDataConfig | HERawDataConfig:
+    def data_cfg(self) -> EgoDexDataConfig | HERawDataConfig | MixedDataConfig:
         return self.cfg.data  # type: ignore
     
     def init_models(self):
@@ -72,7 +73,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         if val_dataloader is not None: 
             self.val_dataloader = accelerator.prepare(self.val_dataloader)
 
-        if not "Mixed" in self.data_cfg.__class__.__name__:
+        if not (hasattr(self.data_cfg, "sampler") and self.data_cfg.sampler is not None) :
             # dont prepare dataloader for mixed dataset as custom sampler is used
             self.train_dataloader = accelerator.prepare(self.train_dataloader)
 
@@ -128,7 +129,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         self, train_dataset, val_dataset
     ) -> tuple[DataLoader, DataLoader | None]:
         from psi.data.dataset import MixtureDataset
-
+        # print(self.train_dataset);print(self.data_cfg.sampler);exit(0)
         if isinstance(self.train_dataset, MixtureDataset):
             if self.data_cfg.sampler == "batch_mixture":
                 from psi.data.sampler import BatchMixtureSampler

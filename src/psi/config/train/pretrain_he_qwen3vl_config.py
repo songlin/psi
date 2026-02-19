@@ -13,15 +13,9 @@ class DynamicDataTransform(DataTransform):
     action_state: pt.ActionStateTransform
     model: pt.Qwen3vlModelTransform
     
-    def __call__(self, data, **kwargs):
-        data = self.repack(data, **kwargs)
-        data = self.action_state(data, **kwargs)
-        data = self.model(data, **kwargs)
-        return data
-    
-class DynamicEgoDexDataConfig(HERawDataConfig):
+class DynamicDataConfig(HERawDataConfig):
     transform: DynamicDataTransform
 
 class DynamicLaunchConfig(LaunchConfig):
-    data: DynamicEgoDexDataConfig
+    data: DynamicDataConfig
     model: Qwen3VLModelConfig

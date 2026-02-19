@@ -60,6 +60,17 @@ class FieldTransform(BaseModel):
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return data
 
+class DataTransform(BaseModel):
+    repack: RepackTransform
+    model: ModelTransform
+    action_state: FieldTransform
+    
+    def __call__(self, data, **kwargs):
+        data = self.repack(data, **kwargs)
+        data = self.action_state(data, **kwargs)
+        data = self.model(data, **kwargs)
+        return data
+    
 class EgodexRepackTransform(BaseModel):
     dataset_name: str = "egodex"
     stage:str = "pretrain"  # "pretrain" or "postpre"
@@ -595,7 +606,7 @@ class Qwen3vlModelTransform(ModelTransform):
     adaptive_resize: bool = False
     img_sizes: dict[str, Any] = Field(default_factory=lambda: {
         "egodex": [270, 480],
-        "we"    : [240, 320],
+        "he"    : [240, 320],
     })
 
     def __call__(
@@ -622,7 +633,7 @@ class Qwen3vlModelTransform(ModelTransform):
                 case "egodex":
                     target_size = self.img_sizes["egodex"]
                 case "humanoid-everyday":
-                    target_size = self.img_sizes["we"]
+                    target_size = self.img_sizes["he"]
                 case _:
                     target_size = (256, 256)
             resizer = ResizeImage(size=tuple(target_size))() # type: ignore
@@ -709,10 +720,96 @@ class Qwen3vlModelTransform(ModelTransform):
         )
         return inputs, num_answer_tokens_list
 
+class HEPostPreRepackTransform(RepackTransform):
+    dataset_name: str = "humanoid-everyday"
+    num_past_frames: int = 0
+    action_chunk_size: int = 16
+    use_delta_actions: bool = True
+    pad_action_dim: int | None = None
+    pad_state_dim: int | None = None
 
-class DataTransform(BaseModel):
-    repack: RepackTransform
-    model: ModelTransform
-    action_state: FieldTransform
+    def __call__(
+        self,
+        data: dict[str, Any],
+        **kwargs,
+    ) -> dict[str, Any]:
+        # HACK: different action format determines robot type
+        if data["action.joint_angles"].shape[1] == 26:
+            # H1 robot
+            raw = data["action.joint_angles"]
+            actions = np.concatenate([
+                raw[:, 6:12][::-1], # from left thumb to little
+                np.zeros((raw.shape[0], 1), dtype=np.float32), # pad finger to 7 dof
+                raw[:, 0:6][::-1], # from right thumb to little
+                np.zeros((raw.shape[0], 1), dtype=np.float32), # pad finger to 7 dof
+                raw[:, 12:], # left arm + right arm (each from should to wrist)
+            ], axis=1).astype(np.float32)
+            hand = data["observation.hand_joints"]
+            states = np.concatenate([
+                hand[:, 6:12],
+                np.zeros((hand.shape[0], 1), dtype=np.float32), # pad finger to 7 dof
+                hand[:, 0:6],
+                np.zeros((hand.shape[0], 1), dtype=np.float32), # pad finger to 7 dof 
+                data["observation.arm_joints"]
+            ], axis=1).astype(np.float32)
+        else:
+           actions = data["action.joint_angles"].astype(np.float32)
+           states = np.concatenate((data["observation.hand_joints"], data["observation.arm_joints"]), axis=1).astype(np.float32)
+
+
+        if self.use_delta_actions:
+            actions = actions[1:] - actions[:-1]
+            action_mask = data["action_mask"][1:]
+        else:
+            action_mask = data["action_mask"]
+
+        # Expand action_mask to (T, Da) by repeating along last dimension
+        if action_mask.ndim == 1:
+            action_mask = np.repeat(action_mask[:, None], actions.shape[1], axis=1)
+
+        states, _ = pad_to_len(states, self.pad_state_dim) if self.pad_state_dim is not None else (states, None)
+        if self.pad_action_dim is not None:
+            actions, _ = pad_to_len(actions, self.pad_action_dim)
+            mask, _  = pad_to_len(action_mask, self.pad_action_dim)
+        else:
+            mask = np.ones_like(actions, dtype=bool)
+            # mask = action_mask
+        return {
+            "observations": [pt_to_pil(img, normalized=False) for img in data["observation.images.egocentric"]],
+            "states": states,
+            "actions": actions,
+            "instruction": str(data["task"]).lower(),
+            "dataset": data.get("dataset_name", self.dataset_name),
+            "actions_mask": mask,# torch.from_numpy(mask),
+            "obs_mask": data["obs_mask"], #torch.from_numpy(data["obs_mask"]),
+        }
+
+class MixedRepackTransform(RepackTransform):
+    dataset_name: str = "mixed"
+
+    num_past_frames: int = 0
+    action_chunk_size: int = 1
+    use_delta_actions: bool = True
+    robot_type: str = "mixed"
+    stage: str = "pretrain"  # "pretrain" or "postpre"
+    pad_action_dim: int | None = None
+    pad_state_dim: int | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.stage == "pretrain":
+            self._he_repacker = HEPretrainRepackTransform.model_validate(self.model_dump())
+        else:
+            self._he_repacker = HEPostPreRepackTransform.model_validate(self.model_dump())
+        self._egodex_repacker = EgodexRepackTransform.model_validate(self.model_dump())
+
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
+        dataset_name = data.get("dataset_name", "default")
+        match(dataset_name):
+            case "egodex":
+                return self._egodex_repacker(data, **kwargs)
+            case "humanoid-everyday":
+                return self._he_repacker(data, **kwargs)
         return data
+    
+
+

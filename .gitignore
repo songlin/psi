@@ -48,3 +48,4 @@ src/fast/egodex-*
 
 .deepspeed_env
 *.bak
+uv.lock
