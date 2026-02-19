@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Any, Dict, List, TYPE_CHECKING
-# from psi.data.egodex.egodex_dataset import EgoDexDataset
-
-class EgoDexDataConfig(BaseModel):
+from psi.config.config import DataConfig
+class EgoDexDataConfig(DataConfig):
     root_dir: str
     upsample_rate: int = 3
     chunk_size: int = 16

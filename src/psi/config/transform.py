@@ -56,6 +56,10 @@ class ModelTransform(BaseModel):
     def __call__(self, data: dict[str, Any], no_aug: bool = False, **kwargs) -> dict[str, Any]:
         return data
 
+class FieldTransform(BaseModel):
+    def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
+        return data
+
 class EgodexRepackTransform(BaseModel):
     dataset_name: str = "egodex"
     stage:str = "pretrain"  # "pretrain" or "postpre"
@@ -79,6 +83,244 @@ class EgodexRepackTransform(BaseModel):
             actions_mask=mask, #(Tp, Da)
         )
 
+class HEPretrainRepackTransform(RepackTransform):
+    dataset_name: str = "humanoid-everyday"
+    num_past_frames: int = 0
+    action_chunk_size: int = 1
+    use_delta_actions: bool = True
+    robot_type: str = "g1"
+    # pad_action_dim: int | None = None
+    # pad_state_dim: int | None = None
+
+    def _to_numpy(self, value, dtype=np.float32):
+        if isinstance(value, torch.Tensor):
+            value = value.detach().cpu().numpy()
+        return np.asarray(value, dtype=dtype)
+
+    def _ensure_2d(self, value, dim: int, name: str):
+        arr = self._to_numpy(value)
+        if arr.ndim == 1:
+            if arr.shape[0] != dim:
+                raise ValueError(f"{name} expected shape ({dim},), got {arr.shape}")
+            return arr.reshape(1, dim)
+        if arr.ndim == 2:
+            if arr.shape[1] != dim:
+                raise ValueError(f"{name} expected shape (T,{dim}), got {arr.shape}")
+            return arr
+        raise ValueError(f"{name} expected 1D or 2D, got {arr.shape}")
+
+    def _rpy_to_rot6d(self, rpy):
+        from scipy.spatial.transform import Rotation as R
+        rot = R.from_euler("xyz", rpy).as_matrix()
+        return rot[:, :2].reshape(6)
+
+    def _delta_rpy(self, rpy_seq):
+        from scipy.spatial.transform import Rotation as R
+        rot = R.from_euler("xyz", rpy_seq).as_matrix()
+        rel = rot[1:] @ np.transpose(rot[:-1], (0, 2, 1))
+        return R.from_matrix(rel).as_euler("xyz", degrees=False).astype(np.float32)
+
+    def _build_actions(self, data: dict[str, Any]) -> np.ndarray:
+        left_wrist_xyz = self._ensure_2d(
+            data["action.wrists.left.xyz"], 3, "action.wrists.left.xyz"
+        )
+        left_wrist_rpy = self._ensure_2d(
+            data["action.wrists.left.rpy"], 3, "action.wrists.left.rpy"
+        )
+        right_wrist_xyz = self._ensure_2d(
+            data["action.wrists.right.xyz"], 3, "action.wrists.right.xyz"
+        )
+        right_wrist_rpy = self._ensure_2d(
+            data["action.wrists.right.rpy"], 3, "action.wrists.right.rpy"
+        )
+
+        def tip_xyz(keys):
+            for key in keys:
+                if key in data:
+                    return self._ensure_2d(data[key], 3, key)
+            return np.zeros_like(left_wrist_xyz)
+
+        left_thumb = tip_xyz(["action.hands.left_thumb.xyz"])
+        left_index = tip_xyz(["action.hands.left_index.xyz"])
+        left_middle = tip_xyz(
+            ["action.hands.left_middle.xyz", "action.hands.left_middle_finger.xyz"]
+        )
+        left_ring = tip_xyz(["action.hands.left_ring_finger.xyz"])
+        left_little = tip_xyz(["action.hands.left_little_finger.xyz"])
+
+        right_thumb = tip_xyz(["action.hands.right_thumb.xyz"])
+        right_index = tip_xyz(["action.hands.right_index.xyz"])
+        right_middle = tip_xyz(
+            ["action.hands.right_middle.xyz", "action.hands.right_middle_finger.xyz"]
+        )
+        right_ring = tip_xyz(["action.hands.right_ring_finger.xyz"])
+        right_little = tip_xyz(["action.hands.right_little_finger.xyz"])
+
+        if self.use_delta_actions:
+            if left_wrist_xyz.shape[0] < 2:
+                raise ValueError(
+                    "use_delta_actions requires at least 2 action frames; "
+                    "increase action_chunk_size or disable delta."
+                )
+            left_wrist_xyz = left_wrist_xyz[1:] - left_wrist_xyz[:-1]
+            right_wrist_xyz = right_wrist_xyz[1:] - right_wrist_xyz[:-1]
+            left_wrist_rpy = self._delta_rpy(left_wrist_rpy)
+            right_wrist_rpy = self._delta_rpy(right_wrist_rpy)
+
+            left_thumb = left_thumb[1:] - left_thumb[:-1]
+            left_index = left_index[1:] - left_index[:-1]
+            left_middle = left_middle[1:] - left_middle[:-1]
+            left_ring = left_ring[1:] - left_ring[:-1]
+            left_little = left_little[1:] - left_little[:-1]
+
+            right_thumb = right_thumb[1:] - right_thumb[:-1]
+            right_index = right_index[1:] - right_index[:-1]
+            right_middle = right_middle[1:] - right_middle[:-1]
+            right_ring = right_ring[1:] - right_ring[:-1]
+            right_little = right_little[1:] - right_little[:-1]
+
+            left_rot_pad = np.zeros_like(left_wrist_rpy)
+            right_rot_pad = np.zeros_like(right_wrist_rpy)
+        else:
+            left_rot6d = np.stack(
+                [self._rpy_to_rot6d(rpy) for rpy in left_wrist_rpy], axis=0
+            )
+            right_rot6d = np.stack(
+                [self._rpy_to_rot6d(rpy) for rpy in right_wrist_rpy], axis=0
+            )
+            left_wrist_rpy = left_rot6d
+            right_wrist_rpy = right_rot6d
+            left_rot_pad = None
+            right_rot_pad = None
+
+        left_wrist = (
+            np.concatenate([left_wrist_xyz, left_wrist_rpy, left_rot_pad], axis=1)
+            if self.use_delta_actions
+            else np.concatenate([left_wrist_xyz, left_wrist_rpy], axis=1)
+        )
+        right_wrist = (
+            np.concatenate([right_wrist_xyz, right_wrist_rpy, right_rot_pad], axis=1)
+            if self.use_delta_actions
+            else np.concatenate([right_wrist_xyz, right_wrist_rpy], axis=1)
+        )
+
+        actions = np.concatenate(
+            [
+                left_wrist,
+                left_thumb,
+                left_index,
+                left_middle,
+                left_ring,
+                left_little,
+                right_wrist,
+                right_thumb,
+                right_index,
+                right_middle,
+                right_ring,
+                right_little,
+            ],
+            axis=1,
+        ).astype(np.float32)
+        return actions
+
+    def __call__(
+        self,
+        data: dict[str, Any],
+        metadata=None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        hand_states = self._to_numpy(data["observation.hand_joints"])
+        arm_states = self._to_numpy(data["observation.arm_joints"])
+        if hand_states.ndim == 2:
+            hand_states = hand_states[-1]
+        if arm_states.ndim == 2:
+            arm_states = arm_states[-1]
+        states = np.concatenate((hand_states, arm_states), axis=0).astype(np.float32)
+
+        try:
+            actions = self._build_actions(data)
+        except Exception as e:
+            print("Error building actions:")
+            print(data)
+
+            import traceback
+            traceback.print_exc()
+            raise e
+
+        instruction = ""
+        if metadata is not None and "episode_index" in data:
+            episode_idx = int(self._to_numpy(data["episode_index"]).reshape(-1)[0])
+            if (
+                hasattr(metadata, "episodes")
+                and metadata.episodes is not None
+                and episode_idx < len(metadata.episodes)
+            ):
+                instruction = metadata.episodes[episode_idx].get("instruction", "")
+        if not instruction and "task" in data:
+            instruction = data["task"]
+        if isinstance(instruction, bytes):
+            instruction = instruction.decode("utf-8")
+            instruction = self.nice_instruction(instruction.split("/")[1])
+
+        img = data["observation.images.egocentric"]
+        if hasattr(img, "dim") and img.dim() == 4:
+            img = img[0]
+        elif isinstance(img, np.ndarray) and img.ndim == 4:
+            img = img[0]
+
+        return dict(
+            observations=[pt_to_pil(img, normalized=False)],  # list of PIL Image
+            states=states,
+            actions=actions,
+            instruction=str(instruction).lower(),
+            dataset=data.get("dataset_name", self.dataset_name),
+        )
+
+    def nice_instruction(self, instruction: str) -> str:
+        instruction = instruction.replace("_", " ").replace("-", " ")
+        instruction = re.sub(r"\s+", " ", instruction)
+        return instruction.strip()
+
+    def delta_timestamps(self, fps: int):
+        delta = {}
+        delta["observation.hand_joints"] = [
+            -t / fps for t in range(self.num_past_frames, -1, -1)
+        ]
+        delta["observation.arm_joints"] = [
+            -t / fps for t in range(self.num_past_frames, -1, -1)
+        ]
+
+        action_keys = [
+            "action.joint_angles",
+            "action.wrists.left.xyz",
+            "action.wrists.left.rpy",
+            "action.wrists.right.xyz",
+            "action.wrists.right.rpy",
+            "action.hands.left_thumb.xyz",
+            "action.hands.left_index.xyz",
+            "action.hands.right_thumb.xyz",
+            "action.hands.right_index.xyz",
+        ]
+        if self.robot_type == "h1":
+            action_keys += [
+                "action.hands.left_middle_finger.xyz",
+                "action.hands.left_ring_finger.xyz",
+                "action.hands.left_little_finger.xyz",
+                "action.hands.right_middle_finger.xyz",
+                "action.hands.right_ring_finger.xyz",
+                "action.hands.right_little_finger.xyz",
+            ]
+        else:
+            action_keys += [
+                "action.hands.left_middle.xyz",
+                "action.hands.right_middle.xyz",
+            ]
+        action_len = (
+            self.action_chunk_size + 1 if self.use_delta_actions else self.action_chunk_size
+        )
+        for key in action_keys:
+            delta[key] = [t / fps for t in range(action_len)]
+        return delta
 
 class SimpleRepackTransform(RepackTransform):
     dataset_name: str = "simple"
@@ -179,7 +421,7 @@ class IdentityTransform(BaseModel):
         """ Denormalize the action. """
         return normalized
 
-class ActionMaxMinTransform(BaseModel):
+class ActionMaxMinTransform(FieldTransform):
     
     stat_path: str
     action_norm_type: str = "bounds"  # "bounds_q99"
@@ -343,7 +585,7 @@ class ActionMaxMinTransform(BaseModel):
         return action # type: ignore
 
 
-class Hfm_ModelTransform(ModelTransform):
+class Qwen3vlModelTransform(ModelTransform):
     resize: ResizeImage = Field(default_factory=lambda: ResizeImage(size=(270, 480)))
     color_jitter: ColorJitter
     img_aug: bool = False
@@ -469,5 +711,8 @@ class Hfm_ModelTransform(ModelTransform):
 
 
 class DataTransform(BaseModel):
+    repack: RepackTransform
+    model: ModelTransform
+    action_state: FieldTransform
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return data

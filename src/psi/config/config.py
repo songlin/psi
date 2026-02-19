@@ -8,6 +8,7 @@ from typing import Union, Any, TYPE_CHECKING
 from tyro.conf import subcommand as cmd
 from pathlib import Path
 import datetime
+from psi.config.transform import DataTransform
 
 class LoggingConfig(BaseModel):
     logging_dir: str = "logs"
@@ -16,7 +17,7 @@ class LoggingConfig(BaseModel):
 
 
 class WandbConfig(BaseModel):
-    project: str = "hfm"
+    project: str = "psi"
     entity: str | None = None
     group: str | None = None
     id: str | None = None
@@ -182,3 +183,9 @@ class LaunchConfig(BaseModel):
 
         if self.timestamp is None:
             self.timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
+
+class DataConfig(BaseModel):
+    transform: DataTransform
+
+    def __call__(self, split: str = "train", transform_kwargs={}, **kwargs) -> Any:
+        raise NotImplementedError

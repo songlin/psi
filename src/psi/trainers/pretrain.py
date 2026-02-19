@@ -36,7 +36,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
     @property
     def task_run_name(self):
         tokenizer = self.model_cfg.action_tokenizer.__class__.__name__.replace("ActionTokenizerConfig", "").lower()
-        dataset_name = self.data_cfg.transform.repack.dataset_name # type: ignore
+        dataset_name = shorten(self.data_cfg.transform.repack.dataset_name) # type: ignore
         delta = "delta" if self.data_cfg.use_delta_actions else "abs"
         return (
             f".{tokenizer}"
@@ -283,6 +283,13 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             concat_img = np.concatenate(img_arrays, axis=1)
             wandb.log({"raw_images": [wandb.Image(concat_img, caption=f"raw images {self.global_step}")]}, step=self.global_step)
 
+        """ print({
+            "loss": loss.item(),
+            "action_accuracy": action_accuracy.item(),
+            "action_l1_loss": action_l1_loss.item(),
+            "lr": self.lr_scheduler.get_last_lr()[0],
+        }); exit(0) """
+        
         return self.accelerator.sync_gradients, {
             "loss": loss.item(),
             "action_accuracy": action_accuracy.item(),

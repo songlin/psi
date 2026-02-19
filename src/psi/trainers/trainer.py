@@ -342,37 +342,12 @@ class Trainer(ABC):
 
     def step(self, batch_input, global_step, local_step) -> tuple[bool, dict[str, Any]]:
         """ Perform a single training step. """
-        # if self.accelerator is None:
-        #     raise ValueError("Accelerator must be provided for training step.")
 
         self.local_step = local_step
         self.global_step = global_step
-        # import random
-        # def restore_random_states(state):
-        #     random.setstate(state["python"])
-        #     np.random.set_state(state["numpy"])
-        #     torch.set_rng_state(state["torch_cpu"])
-        #     # Restore all CUDA devices
-        #     torch.cuda.set_rng_state_all(state["torch_cuda"])
-        # import numpy as np
-        # import torch
-        # torch.serialization.add_safe_globals([np.core.multiarray._reconstruct, np.ndarray, np.dtype, np.dtypes.UInt32DType])
-        # state = torch.load("/hfm/xuezhou/vlt-policy/rng_state.pt", map_location="cpu", weights_only=True)
-        # restore_random_states(state)
+
         sync_gradients, losses = self.training_step(batch_input)
-        # # self.accumulated_steps += 1
-
-        # if sync_gradients:
-        #     self.log(losses)
-
         return sync_gradients, losses
-
-    # def prepare_accelerator(self, accelerator: Accelerator):
-    #     self.model = accelerator.prepare(self.model)
-    #     self.train_dataloader = accelerator.prepare(self.train_dataloader)
-    #     self.val_dataloader = accelerator.prepare(self.val_dataloader)
-    #     self.prepare(accelerator)
-    #     return self.train_dataloader, self.val_dataloader
 
     @abstractmethod
     def prepare(self, accelerator: Accelerator) -> DataLoader:
@@ -410,14 +385,6 @@ class Trainer(ABC):
         self.accelerator = accelerator
         return self.train_dataloader # type: ignore
 
-    # def forward_loss(self, batch):
-    #     """ Forward pass through the model and return the loss. """
-
-    # @abstractmethod
-    # def inference(self):
-    #     ...
-
-    # @abstractmethod
     def save_checkpoint(self, global_step: int) -> str | None:
         save_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(save_dir, exist_ok=True)
@@ -451,6 +418,7 @@ class Trainer(ABC):
                     except Exception as e:
                         overwatch.warning(f"Failed to remove old checkpoint {old_ckpt_path}: {e}")
 
+        self.accelerator.wait_for_everyone()
         return ckpt_dir
 
     def resume_from_checkpoint(self) -> tuple[int, Optional[str]]:

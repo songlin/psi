@@ -32,15 +32,32 @@ python -c "import psi;print(psi.__version__)"
 
 ## Pre-Training
 
+predownload the `Qwen/Qwen3-VL-2B-Instruct` weights
+```
+scripts/predownload_qwen3vl.py
+```
+
+pretrain on egodex
+```
+bash scripts/train/psi0/pretrain-egodex-psi0-fast.sh 
+```
+
+pretrain on humanoid everyday
+```
+bash scripts/train/psi0/pretrain-he-psi0-fast.sh 
+```
+
+## Post-Training
+
+
+
+## Fine-Tuning
+
 override to fix a lerobot bug
 ```
 cp src/lerobot_patch/common/datasets/lerobot_dataset.py \
   .venv-hfm/lib/python3.10/site-packages/lerobot/common/datasets/lerobot_dataset.py
 ```
-
-## Post-Training
-
-## Fine-Tuning
 
 ### Data Preprocessing
 ### Training

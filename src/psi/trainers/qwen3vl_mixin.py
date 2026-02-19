@@ -190,17 +190,22 @@ class Qwen3vlMixin:
 
         model_cfg = trainer.cfg.model 
         overwatch.info(f"Loading pretrained from {model_cfg.model_name_or_path}")
-                 
-        # default: Load the model on the available device(s)
-        self.model = Qwen3VLForConditionalGeneration.from_pretrained(
-            model_cfg.model_name_or_path,
-            attn_implementation="flash_attention_2",
-            dtype=torch.bfloat16,
-            # safe for multi-node training, please download weights in advance:
-            # python scripts/train/hfm/predownload_qwen3vl.py
-            local_files_only=True 
-        )
-        overwatch.info(f"Load VLM from {model_cfg.model_name_or_path} successfully.")
+
+        try:
+            # default: Load the model on the available device(s)
+            self.model = Qwen3VLForConditionalGeneration.from_pretrained(
+                model_cfg.model_name_or_path,
+                attn_implementation="flash_attention_2",
+                dtype=torch.bfloat16,
+                local_files_only=True 
+            )
+            overwatch.info(f"Load VLM from {model_cfg.model_name_or_path} successfully.")
+        except Exception as e:
+            # safe for multi-node training, please download weights in advance
+            overwatch.critical(f"Failed to load VLM from {model_cfg.model_name_or_path}. \n"
+                               f"Please download weights in advance using: 'python scripts/predownload_qwen3vl.py'\n"
+                               f"Auto downloading is disabled in multi-node training to prevent conflicts. \n")
+            raise e
 
         if not hasattr(self.model.config, "hidden_size"):
             self.model.config.hidden_size = self.model.config.text_config.hidden_size

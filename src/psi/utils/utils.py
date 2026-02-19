@@ -65,7 +65,7 @@ def nice(x):
 def shorten(x):
     if "_" in x or "-" in x:
         return "".join([y[0] for y in re.split(r"[-_]", x)])
-    return f"{x[:5]}"
+    return f"{x[:6]}"
 
 def inspect(x):
     return (x.max(), x.min(), x.mean(), x.std())
