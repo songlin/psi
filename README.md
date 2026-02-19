@@ -233,6 +233,18 @@ cd src/gr00t
 ```
 
 
+### InternVLA-M1
+Install the env 
+```bash
+cd src/InternVLA-M1; uv sync --python 3.10
+```
+1. training
+```bash
+cd src/InternVLA-M1; 
+bash scripts/train_internvla.sh
+```
+
+
 ## Benchmarking of SIMPLE
 1. download sim data
 ```
