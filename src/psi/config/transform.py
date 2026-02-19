@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from PIL import Image
 from pydantic import BaseModel, Field, model_validator
 from torchvision.transforms import v2
-from psi.config.augmentation import ResizeImage, ColorJitter, CenterCrop, Normalize
+from psi.config.augmentation import *
 from psi.utils import get_asset_dir, pt_to_pil, resolve_path
 
 IGNORE_INDEX = -100
@@ -720,7 +720,7 @@ class Qwen3vlModelTransform(ModelTransform):
         )
         return inputs, num_answer_tokens_list
 
-class HEPostPreRepackTransform(RepackTransform):
+class HEPosttrainRepackTransform(RepackTransform):
     dataset_name: str = "humanoid-everyday"
     num_past_frames: int = 0
     action_chunk_size: int = 16
@@ -799,7 +799,7 @@ class MixedRepackTransform(RepackTransform):
         if self.stage == "pretrain":
             self._he_repacker = HEPretrainRepackTransform.model_validate(self.model_dump())
         else:
-            self._he_repacker = HEPostPreRepackTransform.model_validate(self.model_dump())
+            self._he_repacker = HEPosttrainRepackTransform.model_validate(self.model_dump())
         self._egodex_repacker = EgodexRepackTransform.model_validate(self.model_dump())
 
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
@@ -812,4 +812,125 @@ class MixedRepackTransform(RepackTransform):
         return data
     
 
+class Psi0ModelTransform(ModelTransform):
+    resize: ResizeImage = Field(default_factory=lambda: ResizeImage(size=(224)))
+    center_crop: CenterCrop = Field(default_factory=lambda: CenterCrop(size=224))
+    color_jitter: ColorJitter = Field(default_factory=lambda: ColorJitter())
+    gaussian_noise: GaussianNoise = Field(default_factory=lambda: GaussianNoise(mean=0, std=3, prob_skip=0.1))
+    img_aug: bool = False
+    
+    # for mixed dataset with different image sizes
+    adaptive_resize: bool = False
+    img_sizes: dict[str, Any] = Field(default_factory=lambda: {
+        "egodex": [270, 480],
+        "he"    : [240, 320],
+    })
 
+    def __call__(
+        self, data: dict[str, Any], vlm_processor=None, no_aug=False, **kwargs
+    ) -> dict[str, Any]:
+        do_img_aug = False if no_aug else self.img_aug
+        if self.adaptive_resize:
+            assert data["dataset"] is not None
+            match data["dataset"]:
+                case "egodex":
+                    target_size = self.img_sizes["egodex"]
+                case "humanoid-everyday":
+                    target_size = self.img_sizes["he"]
+                case _:
+                    target_size = (256, 256)
+            resizer = ResizeImage(size=tuple(target_size))() # type: ignore
+            center_crop = CenterCrop(size=tuple(target_size))() # type: ignore
+        else:
+            resizer = self.resize()
+            center_crop = self.center_crop()
+            
+        t1 = v2.Compose([
+            resizer,
+            center_crop,
+            self.color_jitter() if do_img_aug else v2.Identity(),
+        ])
+
+        images = [t1(img) for img in data["observations"]]
+        instruction = data["instruction"]
+
+        inputs: dict = self.build_qwenvl_inputs(
+            vlm_processor, images, instruction,
+        ) # type: ignore
+        # labels = copy.deepcopy(inputs["input_ids"])
+        # keep loss on the answer + EOS + formatting tokens
+        # labels[:, : -(num_action_tokens + 2)] = IGNORE_INDEX 
+        # inputs["labels"] = labels
+        inputs["dataset_name"] = data.get("dataset", "unknown")
+        inputs["raw_actions"] = data["raw_actions"]
+        if "actions_mask" in data:
+            inputs["actions_mask"] = data["actions_mask"]
+
+        inputs["raw_images"] = images
+        inputs['actions'] = data["actions"]
+        inputs['states'] = data["states"]
+        inputs['instruction'] = data["instruction"]
+        return inputs
+
+    def build_qwenvl_inputs(
+        self,
+        vlm_processor,
+        imgs,
+        instruction,
+        # state,
+        # action,
+        **kwargs,
+    ) -> tuple[dict, int]:
+        from qwen_vl_utils import process_vision_info
+
+        """adapted from Qwen_VL_Interface.build_qwenvl_inputs"""
+        messages = []
+        # num_answer_tokens_list = []
+
+        # raw_action_tokens = vlm_processor.tokenizer(tokenized_action)["input_ids"]
+        # num_answer_tokens = len(raw_action_tokens)
+        # num_answer_tokens_list.append(num_answer_tokens)
+
+        content = [{"type": "image", "image": img} for img in imgs]
+        content.append({"type": "text", "text": instruction})
+        user_msg = {"role": "user", "content": content}
+
+        # assistant_msg = {
+        #     "role": "assistant",
+        #     "content": [
+        #         {"type": "text", "text": "!"} # HACK: use ! as action placeholder
+        #     ],  # squeeze batch dim
+        # }
+        messages.append([user_msg])
+
+        # Prepare text prompts using processor
+        # default process is json --> message --> texts --> input_ids
+        texts = [
+            vlm_processor.apply_chat_template(
+                m, tokenize=False, add_generation_prompt=True
+            )
+            for m in messages
+        ]
+        image_inputs, video_inputs = process_vision_info(messages, image_patch_size=16)  # type: ignore
+        inputs = vlm_processor(
+            text=texts,
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+        # HACK replace "!" token with action tokens
+        # exclamation_token_id = vlm_processor.tokenizer.convert_tokens_to_ids("!")
+        # device = inputs["input_ids"].device
+        # assert torch.all(inputs["input_ids"][:, -3] == exclamation_token_id)
+        # inputs["input_ids"] = torch.concat([
+        #     inputs["input_ids"][:, :-3], 
+        #     torch.tensor([tokenized_action], device=device).repeat(inputs["input_ids"].shape[0], 1),
+        #     inputs["input_ids"][:, -2:]
+        # ], dim=1)
+        # inputs["attention_mask"] = torch.concat([
+        #     inputs["attention_mask"][:, :-3], 
+        #     torch.ones((inputs["attention_mask"].shape[0], len(tokenized_action)), device=device),
+        #     inputs["attention_mask"][:, -2:]
+        # ], dim=1)
+        return inputs
