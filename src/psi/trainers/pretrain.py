@@ -12,8 +12,9 @@ from accelerate import Accelerator
 from psi.trainers import Trainer,worker_init_fn
 if TYPE_CHECKING:
     from psi.config.config import LaunchConfig
-    from psi.config.model_qwen3vl import Qwen3VL_ModelConfig
+    from psi.config.model_qwen3vl import Qwen3VLModelConfig
     from psi.config.data_egodex import EgoDexDataConfig
+    from psi.config.data_he import HERawDataConfig
 
 from psi.utils import initialize_overwatch, shorten, flatten
 overwatch = initialize_overwatch(__name__)
@@ -48,11 +49,11 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         )
     
     @property
-    def model_cfg(self) -> Qwen3VL_ModelConfig:
+    def model_cfg(self) -> Qwen3VLModelConfig:
         return self.cfg.model  # type: ignore
     
     @property
-    def data_cfg(self) -> EgoDexDataConfig | HEDataConfig | MixedDataConfig:
+    def data_cfg(self) -> EgoDexDataConfig | HERawDataConfig:
         return self.cfg.data  # type: ignore
     
     def init_models(self):
@@ -289,7 +290,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
             "action_l1_loss": action_l1_loss.item(),
             "lr": self.lr_scheduler.get_last_lr()[0],
         }); exit(0) """
-        
+
         return self.accelerator.sync_gradients, {
             "loss": loss.item(),
             "action_accuracy": action_accuracy.item(),

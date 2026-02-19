@@ -8,7 +8,7 @@ from .tokenizer import (
     TextActionTokenizerConfig
 )
 
-class Qwen3VL_ModelConfig(ModelConfig):
+class Qwen3VLModelConfig(ModelConfig):
     # Training Schedule
     weight_decay: float = 0.01 # L2 regularization strength
 

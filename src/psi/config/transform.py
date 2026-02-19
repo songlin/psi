@@ -421,7 +421,7 @@ class IdentityTransform(BaseModel):
         """ Denormalize the action. """
         return normalized
 
-class ActionMaxMinTransform(FieldTransform):
+class ActionStateTransform(FieldTransform):
     
     stat_path: str
     action_norm_type: str = "bounds"  # "bounds_q99"
