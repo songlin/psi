@@ -306,6 +306,51 @@ class HEPretrainRepackTransform(RepackTransform):
             delta[key] = [t / fps for t in range(action_len)]
         return delta
 
+class RealRepackTransform(RepackTransform):
+    dataset_name: str = "real"
+
+    conditions: list[str] = Field(default_factory=lambda: [])
+    image_keys: List[str] = Field(default_factory=lambda: ["observation.images.egocentric"])
+    state_key: str = "states"
+    action_key: str = "action"
+    instruction_key: str = "task"
+
+    num_past_frames: int = 0
+    action_chunk_size: int = 30
+
+    pad_action_dim: int | None = None
+    pad_state_dim: int | None = None
+
+    def delta_timestamps(self, fps):
+        delta = {}
+        for image_key in self.image_keys:
+            delta[image_key] = [-t/fps for t in range(self.num_past_frames, -1, -1)]
+
+        delta[self.state_key] = [-t/fps for t in range(self.num_past_frames, -1, -1)]
+        delta[self.action_key] = [t/fps for t in range(self.action_chunk_size)]
+        return delta
+
+    def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
+        states, _ = pad_to_len(data[self.state_key], self.pad_state_dim) if self.pad_state_dim is not None else (data[self.state_key], None)
+
+        if self.pad_action_dim is not None:
+            actions, mask = pad_to_len(data[self.action_key], self.pad_action_dim) 
+        else:
+            actions = data[self.action_key]
+            mask = np.ones_like(actions, dtype=bool)
+
+        result = {
+            "observations": [ 
+                pt_to_pil(data[key], normalized=False)
+                for key in self.image_keys
+            ], # list of PIL Image
+            "states": np.array(states, dtype=np.float32), # (To, Da)
+            "actions": np.array(actions, dtype=np.float32),  # (Tp, Da)
+            "instruction": data[self.instruction_key].lower(),
+            "actions_mask": mask, #(Tp, Da)
+        } 
+        return result
+
 class SimpleRepackTransform(RepackTransform):
     dataset_name: str = "simple"
 

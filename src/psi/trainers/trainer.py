@@ -7,7 +7,7 @@ from copy import copy
 from abc import ABC, abstractmethod
 if TYPE_CHECKING:
     from psi.config.config import LaunchConfig, TrainConfig, LoggingConfig
-    from psi.config.data import  DataConfig
+    from psi.config.config import  DataConfig
 from accelerate import Accelerator
 from transformers.trainer_utils import PredictionOutput
 from transformers.optimization import get_scheduler
@@ -87,7 +87,7 @@ class Trainer(ABC):
 
     @property
     def data_cfg(self) -> DataConfig:
-        return self.cfg.data # type: ignore
+        return self.cfg.data
 
     @property
     def hf_token(self):
@@ -132,7 +132,7 @@ class Trainer(ABC):
         else:
             self.lr_scheduler = accelerate.utils.DummyScheduler(
                 optimizer, total_num_steps=self.max_training_steps, warmup_num_steps=self.num_warmup_steps
-            )
+            ) # type: ignore
 
         return self.lr_scheduler
 

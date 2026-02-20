@@ -10,7 +10,7 @@ ulimit -n 65535
 echo "Training with $NPROC_PER_NODE GPUs"
 
 args="
-finetune_simple_config \
+finetune_simple_psi0_config \
 --seed=292285 \
 --exp=sim.bent-pick-50hz.rtc \
 --train.name=finetune \

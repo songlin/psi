@@ -346,7 +346,7 @@ class FinetuneTrainer(Trainer):
         # Log batch["raw_image"] to wandb every 100 steps
         if (
             hasattr(self, "global_step")
-            and self.global_step % 100 == 0
+            and self.global_step % self.cfg.log.log_freq == 0
             and "raw_images" in batch
             and self.accelerator.is_main_process
             and self.cfg.log.report_to == "wandb"

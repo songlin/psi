@@ -153,6 +153,8 @@ class LaunchConfig(BaseModel):
     log: LoggingConfig
     wandb: WandbConfig
     train: TrainConfig
+    data: DataConfig
+    model: ModelConfig
     
     def model_post_init(self, __context: Any) -> None:
         is_multinode = (

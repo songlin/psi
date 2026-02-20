@@ -368,6 +368,7 @@ class PosttrainTrainer(Trainer):
             and self.global_step % self.cfg.log.log_freq == 0
             and "raw_images" in batch
             and self.accelerator.is_main_process
+            and self.cfg.log.report_to == "wandb"
         ):
             raw_imgs = batch["raw_images"]
             # Support both torch.Tensor and numpy
