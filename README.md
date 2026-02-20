@@ -1,4 +1,4 @@
-# Psi0
+# $\Psi_0$: An Open Foundation Model <br/> Towards Universal Humanoid Loco-Manipulation
 
 ## Installation
 
@@ -18,7 +18,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 uv venv .venv-psi --python 3.10
 source .venv-psi/bin/activate
-cp envs/uv.lock.psi0 uv.lock
 GIT_LFS_SKIP_SMUDGE=1  uv sync --all-groups --index-strategy unsafe-best-match  --frozen --active
 ```
 
@@ -28,6 +27,33 @@ source .venv-psi/bin/activate
 python -c "import psi;print(psi.__version__)"
 ```
 a version number will be displayed.
+
+## Fine-Tuning
+
+override to fix a lerobot bug
+```
+cp src/lerobot_patch/common/datasets/lerobot_dataset.py \
+  .venv-psi/lib/python3.10/site-packages/lerobot/common/datasets/lerobot_dataset.py
+```
+### Simulation
+
+download data
+```
+hf download songlinwei/psi-data simple/G1WholebodyBendPick-v0-psi0.zip 
+  --local-dir=/hfm/data/simple --repo-type=dataset
+```
+
+start training
+```
+bash scripts/train/psi0/finetune-simple-psi0-rtc.sh
+```
+
+### Real-Robot
+
+### Data Preprocessing
+### Training
+### Serve
+
 
 ## Pre-Training
 
@@ -47,21 +73,6 @@ bash scripts/train/psi0/pretrain-he-psi0-fast.sh
 ```
 
 ## Post-Training
-
-
-
-## Fine-Tuning
-
-override to fix a lerobot bug
-```
-cp src/lerobot_patch/common/datasets/lerobot_dataset.py \
-  .venv-hfm/lib/python3.10/site-packages/lerobot/common/datasets/lerobot_dataset.py
-```
-
-### Data Preprocessing
-### Training
-### Serve
-
 
 
 

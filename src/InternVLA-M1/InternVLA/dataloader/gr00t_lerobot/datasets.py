@@ -1114,7 +1114,7 @@ class LeRobotSingleDataset(Dataset):
                 # Combine statistics from filtered action sub-keys
                 combined_action_stats = combine_modality_stats(filtered_action_stats)
                 
-                # Add mask field based on whether it's gripper or not
+                # Add mask field: based on whether it's gripper or not
                 mask = generate_action_mask_for_used_keys(
                     self.metadata.modalities.action, filtered_action_stats.keys()
                 )

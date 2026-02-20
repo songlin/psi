@@ -38,9 +38,9 @@ model.action-tokenizer:fast \
 --log.report_to=wandb \
 --data.chunk_size=1 \
 --data.upsample_rate=3 \
---data.transform.action-state.action_norm_type=bounds_q99 \
---data.transform.action-state.stat-action-key=egodex \
---data.transform.action-state.stat-path=assets/stats/egodex_stat_all.json \
+--data.transform.field.action_norm_type=bounds_q99 \
+--data.transform.field.stat-action-key=egodex \
+--data.transform.field.stat-path=assets/stats/egodex_stat_all.json \
 --data.transform.model.resize.size 270 480 \
 --data.root-dir=/hfm/data/egodex \
 --data.use-delta-actions \

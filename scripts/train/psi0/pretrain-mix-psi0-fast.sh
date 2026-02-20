@@ -48,9 +48,9 @@ model.action-tokenizer:fast \
 --data.transform.repack.action-chunk-size=1 \
 --data.transform.repack.use-delta-actions \
 --data.transform.repack.robot-type=both \
---data.transform.action-state.action_norm_type=bounds_q99 \
---data.transform.action-state.stat-action-key=egodex \
---data.transform.action-state.stat-path=assets/stats/egodex_stat_all.json \
+--data.transform.field.action_norm_type=bounds_q99 \
+--data.transform.field.stat-action-key=egodex \
+--data.transform.field.stat-path=assets/stats/egodex_stat_all.json \
 --data.transform.model.adaptive-resize \
 --data.transform.model.img-sizes.egodex 270 480 \
 --data.transform.model.img-sizes.he 240 320 \

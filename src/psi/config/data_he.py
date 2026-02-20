@@ -19,7 +19,6 @@ class HERawDataConfig(DataConfig):
         use_delta_actions = getattr(repack, "use_delta_actions", False)
         self.chunk_size = int(action_chunk_size)
         self.use_delta_actions = bool(use_delta_actions)
-        # FIXME create a validation dataset
         dataset = HERawDataset(
             data_root=self.root_dir,
             num_past_frames=num_past_frames,

@@ -63,11 +63,11 @@ class FieldTransform(BaseModel):
 class DataTransform(BaseModel):
     repack: RepackTransform
     model: ModelTransform
-    action_state: FieldTransform
+    field: FieldTransform
     
     def __call__(self, data, **kwargs):
         data = self.repack(data, **kwargs)
-        data = self.action_state(data, **kwargs)
+        data = self.field(data, **kwargs)
         data = self.model(data, **kwargs)
         return data
     

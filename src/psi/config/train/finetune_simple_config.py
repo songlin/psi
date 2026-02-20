@@ -1,20 +1,20 @@
 from typing import Union, Annotated
 from pydantic import BaseModel, Field, model_validator
-# from tyro.conf import subcommand as cmd
+
 from psi.config.config import LaunchConfig
-from psi.config.model_qwen3vl import Qwen3VLModelConfig
-from psi.config.data_mix import MixedDataConfig
-from psi.config import transform as pt
+from psi.config.data_simple import SimpleDataConfig
+from psi.config.model_psi0 import Psi0ModelConfig
 from psi.config.transform import DataTransform
+from psi.config import transform as pt
 
 class DynamicDataTransform(DataTransform):
-    repack: pt.MixedRepackTransform
+    repack: pt.SimpleRepackTransform
     field: pt.ActionStateTransform
-    model: pt.Qwen3vlModelTransform
+    model: pt.Psi0ModelTransform
 
-class DynamicDataConfig(MixedDataConfig):
+class DynamicDataConfig(SimpleDataConfig):
     transform: DynamicDataTransform
 
 class DynamicLaunchConfig(LaunchConfig):
     data: DynamicDataConfig
-    model: Qwen3VLModelConfig
+    model: Psi0ModelConfig

@@ -159,9 +159,9 @@ def _initialize_accelerator(trainer: Trainer) -> Accelerator:
                     f.write(f"{k}={v}\n")
 
         # copy dataset statistics file if exists
-        if hasattr(trainer.cfg.data.transform.action_state, "stat_path"):
+        if hasattr(trainer.cfg.data.transform.field, "stat_path"):
             from psi.utils import resolve_path
-            stat_path = resolve_path(trainer.cfg.data.transform.action_state.stat_path) # type: ignore
+            stat_path = resolve_path(trainer.cfg.data.transform.field.stat_path) # type: ignore
             if os.path.exists(stat_path):
                 dst_stat_path = os.path.join(trainer.project_dir, "dataset_statistics.json")
                 shutil.copy2(stat_path, dst_stat_path)

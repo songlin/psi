@@ -10,7 +10,7 @@ from psi.config.transform import DataTransform
 
 class DynamicDataTransform(DataTransform):
     repack: pt.MixedRepackTransform
-    action_state: pt.ActionStateTransform
+    field: pt.ActionStateTransform
     model: pt.Psi0ModelTransform
 
 class DynamicDataConfig(MixedDataConfig):

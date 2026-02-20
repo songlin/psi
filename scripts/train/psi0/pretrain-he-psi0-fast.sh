@@ -42,9 +42,9 @@ model.action-tokenizer:fast \
 --data.transform.repack.action-chunk-size=1 \
 --data.transform.repack.use-delta-actions \
 --data.transform.repack.robot-type=both \
---data.transform.action-state.action_norm_type=bounds_q99 \
---data.transform.action-state.stat-action-key=egodex \
---data.transform.action-state.stat-path=assets/stats/egodex_stat_all.json \
+--data.transform.field.action_norm_type=bounds_q99 \
+--data.transform.field.stat-action-key=egodex \
+--data.transform.field.stat-path=assets/stats/egodex_stat_all.json \
 --data.transform.model.resize.size 240 320 \
 --data.root-dir=/hfm/data/HE_RAW \
 --data.use-delta-actions \

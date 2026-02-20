@@ -33,7 +33,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         overwatch.info("Initialized Pretrain Trainer")
         self.Da = 48 # action dimension
         self._grad_norm_vlm = None
-        self.maxmin = self.data_cfg.transform.action_state
+        self.maxmin = self.data_cfg.transform.field
 
     @property
     def task_run_name(self):

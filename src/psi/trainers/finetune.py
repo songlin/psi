@@ -11,25 +11,22 @@ import contextlib
 import torch.nn.functional as F
 from typing import Dict, Optional, List, Union, Any, TYPE_CHECKING
 from torch.utils.data import DataLoader
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor #, Qwen2TokenizerFast, Qwen3VLProcessor
+from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, Qwen3VLProcessor
 from psi.trainers.qwen3vl_mixin import PaddedCollatorForTogether
 
 if TYPE_CHECKING:    
-    from psi.config.config import TrainConfig #, LaunchConfig
+    from psi.config.config import TrainConfig
     from psi.config.model_psi0 import Psi0ModelConfig
     from psi.config.transform import Psi0ModelTransform
-    from psi.config.data_he import HERawDataConfig
-    from psi.config.data_mix import MixedDataConfig
 
 from accelerate import Accelerator
 
 # from utils.overwatch import initialize_overwatch
 from psi.utils import (
     initialize_overwatch,
-    shorten,
-    move_to_device,
-    batch_str_to_tensor
+    shorten
 )
+from psi.utils.utils import batch_str_to_tensor
 
 overwatch = initialize_overwatch(__name__)
 
@@ -39,7 +36,7 @@ from .trainer import Trainer, worker_init_fn
 from psi.utils import flatten, shorten, move_to_device, rmse, seed_everything
 from psi.models.psi0 import Psi0Model
 
-class PosttrainTrainer(Trainer):
+class FinetuneTrainer(Trainer):
 
     def __init__(self, cfg, device: torch.device):
         super().__init__(cfg, device)
@@ -81,13 +78,13 @@ class PosttrainTrainer(Trainer):
             self.noise_scheduler = FlowMatchEulerDiscreteScheduler(
                 num_train_timesteps=self.train_diffusion_steps,  # MUST be 1000 as per pretrained SD3
             )
-        assert self.train_cfg.mixed_precision == "bf16", "keep qwen3vl in bf16 while training action header in fp32"
+        # assert self.task_cfg.mixed_precision == "no", "other options not tested"
         # assert self.model_cfg.n_conditions == len(self.data_cfg.transform.repack.conditions), "inconsistent confs" # type: ignore
 
     @property
-    def data_cfg(self) -> HERawDataConfig | MixedDataConfig:
-        return self.cfg.data # type: ignore
-    
+    def task_cfg(self) -> TrainConfig:
+        return self.cfg.train
+
     @property
     def model_cfg(self) -> Psi0ModelConfig:
         return self.cfg.model # type: ignore
@@ -98,11 +95,13 @@ class PosttrainTrainer(Trainer):
             attn_implementation="flash_attention_2",
             dtype=torch.bfloat16
         )
+        overwatch.info(f"Load pretrained VLM model from {self.model_cfg.model_name_or_path}")
 
         self.vlm_processor = AutoProcessor.from_pretrained(self.model_cfg.model_name_or_path)
         self.tokenizer = self.vlm_processor.tokenizer
 
         assert self.cfg.train.lora == False
+
         return vlm_model
 
     def init_models(self):
@@ -112,19 +111,46 @@ class PosttrainTrainer(Trainer):
         self.model = Psi0Model(
             model_cfg=self.model_cfg,
             vlm_model=vlm_model,
-            # dtype=self.dtype
         )
-        # print("L129", self.model.action_header.time_ins_embed.out_net[0].weight.dtype) # debug
+
+        # TODO refac
+        if self.model_cfg.pretrained_action_header_path is not None:
+            # load pretrained action header ckpt
+            from safetensors.torch import load_file
+            ckpt_path = self.model_cfg.pretrained_action_header_path
+            state_dict = load_file(f"{ckpt_path}/action_header.safetensors")
+            if state_dict["action_proj_in.dec_pos"].shape[0] != self.model_cfg.action_chunk_size:
+                # only load transformer blocks
+                reduced_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith("transformer_blocks"):
+                        reduced_state_dict[k] = v
+                overwatch.info(f"Loading pretrained action header from {ckpt_path}")
+                self.model.action_header.load_state_dict(reduced_state_dict, strict=False)
+                overwatch.warning("action_proj_in.dec_pos size mismatch, only loaded transformer blocks.")
+            else:
+                self.model.action_header.load_state_dict(state_dict, strict=False)
+            overwatch.info("loaded pretrained action header successfully.")
         
         if self.train_cfg.data_parallel == "deepspeed":
             # HACK to set correct config for deepspeed
             self.model.config = vlm_model.config
             self.model.config.hidden_size = vlm_model.config.text_config.hidden_size
 
-        # only support freeze vlm now
-        assert self.model_cfg.tune_vlm == False
-        for p in self.model.vlm_model.parameters():
-            p.requires_grad = False
+        # Set VLM parameters trainability based on tune_vlm flag
+        if not self.model_cfg.tune_vlm:
+            for p in self.model.vlm_model.parameters():
+                p.requires_grad = False
+            overwatch.info("VLM parameters are frozen (tune_vlm=False)")
+        else:
+            for p in self.model.vlm_model.parameters():
+                p.requires_grad = True
+            # Freeze the final norm layer since we don't use it (we extract hidden_states[-1])
+            if hasattr(self.model.vlm_model.model, 'language_model') and hasattr(self.model.vlm_model.model.language_model, 'norm'):
+                for p in self.model.vlm_model.model.language_model.norm.parameters():
+                    p.requires_grad = False
+                overwatch.info("VLM final norm layer frozen (not used in forward pass)")
+            overwatch.info("VLM parameters are trainable (tune_vlm=True)")
 
         num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         overwatch.info(f"Model has {num_parameters:,} trainable parameters")
@@ -199,76 +225,41 @@ class PosttrainTrainer(Trainer):
         return self.train_dataset, self.val_dataset
 
     def create_dataloaders(self, train_dataset, val_dataset):
-        from psi.data.dataset import MixtureDataset
-        
-        if isinstance(self.train_dataset, MixtureDataset):
-            if self.data_cfg.sampler == "batch_mixture":
-                from psi.data.sampler import BatchMixtureSampler
-                batch_sampler = BatchMixtureSampler(
-                    dataset_lens=[d.dataset_length for d in self.train_dataset.datasets],
-                    mixture_ratios=self.train_dataset.ratios,
-                    num_samples_per_epoch=len(self.train_dataset),
-                    batch_size=self.train_cfg.train_batch_size,
-                )
-            elif self.data_cfg.sampler == "token_mixture":
-                from psi.data.sampler import TokenMixtureSampler
-                batch_sampler = TokenMixtureSampler(
-                    specs=self.train_dataset.specs,
-                    tokens_per_batch=self.data_cfg.tokens_per_device,
-                    num_batches_per_rank=self.num_steps_per_epoch,
-                )
-            else:
-                raise ValueError(f"Unknown sampler type: {self.data_cfg.sampler}")
-            
-            g = shuffle = batch_size = drop_last = None
-        else:
-            batch_sampler = None
-            shuffle = True
-            batch_size = self.train_cfg.train_batch_size
-            drop_last = True
-
-            g = torch.Generator()
-            g.manual_seed(self.cfg.seed or 42)
-        
-        collator = PaddedCollatorForTogether(
-            model_max_length=self.tokenizer.model_max_length,
-            pad_token_id=self.tokenizer.pad_token_id,
-            padding_side="right",
-        )
-        if batch_sampler is not None:
-            self.train_dataloader = DataLoader(
-                train_dataset,
-                batch_sampler=batch_sampler,
-                collate_fn=collator,
-                num_workers=1,
-                worker_init_fn=worker_init_fn,
-                persistent_workers=True
-            )
-            self.train_sampler = batch_sampler # !!important 
-        else:
-            self.train_dataloader = DataLoader(
-                train_dataset,
-                shuffle=shuffle, # 
-                batch_sampler=batch_sampler,
-                generator=g, # 
-                batch_size=batch_size, # 
-                collate_fn=collator,
-                num_workers=1,
-                worker_init_fn=worker_init_fn,
-                persistent_workers=True,
-                drop_last=drop_last #
-            )
+        g = torch.Generator()
+        g.manual_seed(self.cfg.seed or 42)
+        train_dataloader_kwargs = {
+            "num_workers": 12,
+            "drop_last": True,
+            "shuffle": True,
+            "generator": g,
+            "worker_init_fn": worker_init_fn,
+            "persistent_workers": True,  # prefetch_factor=4
+        }
 
         val_dataloader_kwargs = {
-            "num_workers": 1,
+            "num_workers": 12,
             "drop_last": False,
             # "pin_memory": True,
             "persistent_workers": True,
             "shuffle": True,
         }  # 1 small enough to fit im Mem. 2. no need distributed sampler
+
+        collator = PaddedCollatorForTogether(
+            model_max_length=self.tokenizer.model_max_length,
+            pad_token_id=self.tokenizer.pad_token_id,
+            padding_side="right",
+        )
+
+        # create training and validation dataloaders
+        self.train_dataloader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.task_cfg.train_batch_size,
+            collate_fn=collator,
+            **train_dataloader_kwargs,
+        )
         self.val_dataloader = torch.utils.data.DataLoader(
             val_dataset,
-            batch_size=self.train_cfg.val_batch_size,
+            batch_size=self.task_cfg.val_batch_size,
             collate_fn=collator,
             **val_dataloader_kwargs,
         )
@@ -280,22 +271,15 @@ class PosttrainTrainer(Trainer):
         return (
             f".{dataset_name}"
             f".{self.noise_scheduler_name}{self.train_diffusion_steps}"
-            f".{shorten(self.train_cfg.lr_scheduler_type)}"
-            f".lr{self.train_cfg.learning_rate:.1e}"
+            f".{shorten(self.task_cfg.lr_scheduler_type)}"
+            f".lr{self.task_cfg.learning_rate:.1e}"
         )
 
     def prepare(self, accelerator: Accelerator) -> DataLoader:
         # NOTE: if use deepspeed, model, optimizer, lr_scheduler must be prepared together !!! 
-        # print("L301", self.model.action_header.time_ins_embed.out_net[0].weight.dtype) # debug
-        self.model, self.optimizer, self.lr_scheduler = accelerator.prepare(
-            self.model, self.optimizer, self.lr_scheduler
+        self.model, self.optimizer, self.lr_scheduler, self.train_dataloader = accelerator.prepare(
+            self.model, self.optimizer, self.lr_scheduler, self.train_dataloader
         )
-        # self.model.action_header.to(torch.float32) # HACK keep action header in fp32
-        # print("L307", self.model.module.action_header.time_ins_embed.out_net[0].weight.dtype) # debug
-
-        if not (hasattr(self.data_cfg, "sampler") and self.data_cfg.sampler is not None) :
-            # dont prepare dataloader for mixed dataset as custom sampler is used
-            self.train_dataloader = accelerator.prepare(self.train_dataloader)
 
         if self.train_cfg.data_parallel == "deepspeed":
             # Gradient Checkpoint Setup
@@ -308,10 +292,6 @@ class PosttrainTrainer(Trainer):
                         output.requires_grad_(True)
                     self.model.vlm_model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
 
-        val_dataloader = getattr(self, "val_dataloader", None)
-        if val_dataloader is not None: # not using if self.val_dataloader to avoid DataLoader.__len__() being called on iterable dataset
-            self.val_dataloader = accelerator.prepare(self.val_dataloader)
-
         if self.cfg.train.overfit_single_batch:
             overwatch.warning("Overfitting a single batch: reusing first batch every step. set cfg.data.image_aug = False for true memorization.")
             first_batch = next(iter(self.train_dataloader))
@@ -322,7 +302,10 @@ class PosttrainTrainer(Trainer):
                 def __len__(self):
                     return 1
             self.train_dataloader = SingleBatchLoader()
-            self.val_dataloader = SingleBatchLoader()
+
+        val_dataloader = getattr(self, "val_dataloader", None)
+        if val_dataloader is not None: # not using if self.val_dataloader to avoid DataLoader.__len__() being called on iterable dataset
+            self.val_dataloader = accelerator.prepare(self.val_dataloader)
             
         self.accelerator = accelerator
         return self.train_dataloader # type: ignore
@@ -339,11 +322,9 @@ class PosttrainTrainer(Trainer):
             gac = self.accelerator.accumulate(self.model)
         with gac:
             with self.accelerator.autocast():
-                batch = move_to_device(batch, self.device) # type: ignore
                 losses = self.forward_and_loss(self.model, batch)
 
             self.accelerator.backward(losses["loss"])
-            # overwatch.debug(self.global_step, self.device, batch["dataset_name"])
             if self.accelerator.sync_gradients:
                 if self.train_cfg.max_grad_norm is not None:
                     self._grad_norm_act = self.accelerator.clip_grad_norm_(
@@ -365,9 +346,10 @@ class PosttrainTrainer(Trainer):
         # Log batch["raw_image"] to wandb every 100 steps
         if (
             hasattr(self, "global_step")
-            and self.global_step % self.cfg.log.log_freq == 0
+            and self.global_step % 100 == 0
             and "raw_images" in batch
             and self.accelerator.is_main_process
+            and self.cfg.log.report_to == "wandb"
         ):
             raw_imgs = batch["raw_images"]
             # Support both torch.Tensor and numpy
@@ -383,8 +365,9 @@ class PosttrainTrainer(Trainer):
             concat_img = np.concatenate(img_arrays, axis=1)
             wandb.log({"raw_images": [wandb.Image(concat_img, caption=f"raw images {self.global_step}")]}, step=self.global_step)
 
-        # self.train_loss_tracker = step_loss = losses["loss"].detach().item()
-        self.train_loss_tracker = step_loss = self.accelerator.gather(losses["loss"]).mean().item()
+        # step_loss = self.accelerator.gather(losses["loss"].detach()).mean().item() # type:ignore
+        # self.train_loss_tracker = step_loss
+        self.train_loss_tracker = step_loss = losses["loss"].detach().item()
 
         return (self.accelerator.sync_gradients, {
             "lr_act": self.lr, 
@@ -428,12 +411,13 @@ class PosttrainTrainer(Trainer):
         return action_samples
     
     def save_checkpoint(self, global_step: int) -> str | None:
-        save_dir = os.path.join(self.project_dir, "checkpoints")
-        os.makedirs(save_dir, exist_ok=True)
-        ckpt_dir = os.path.join(save_dir, f"ckpt_{global_step}")
-        
-        self.accelerator.save_model(self.model, ckpt_dir)
-        return super().save_checkpoint(global_step)
+        save_path = os.path.join(self.project_dir, "checkpoints")
+        if not os.path.exists(f"{save_path}/ckpt_{global_step}"):
+            save_path = self.accelerator.save_state(f"{save_path}/ckpt_{global_step}")
+            return save_path
+        else:
+            overwatch.warning(f"Checkpoint {global_step} already exists, skipping save.")
+            return None
 
     def evaluate(self) -> dict[str, float] | None:
         accelerator = self.accelerator
@@ -442,8 +426,8 @@ class PosttrainTrainer(Trainer):
 
         total_val_batches = (
             len(self.val_dataloader)
-            if self.train_cfg.val_num_batches == -1
-            else min(self.train_cfg.val_num_batches, len(self.val_dataloader))
+            if self.task_cfg.val_num_batches == -1
+            else min(self.task_cfg.val_num_batches, len(self.val_dataloader))
         )
         val_progress_bar = tqdm(
             self.val_dataloader,
@@ -458,7 +442,7 @@ class PosttrainTrainer(Trainer):
         action_l1_err_list = []
 
         for val_step, val_batch in enumerate(val_progress_bar):
-            val_batch: dict = move_to_device(batch_str_to_tensor(val_batch), self.device) # type: ignore
+            val_batch = batch_str_to_tensor(val_batch)
             # mask = val_batch["mask"]
             mask = torch.ones_like(val_batch["actions"]) # FIXME
             gt_actions = val_batch["actions"]  # (B, Tp, Da)
@@ -488,41 +472,53 @@ class PosttrainTrainer(Trainer):
             if val_step + 1 >= total_val_batches:
                 if accelerator.is_local_main_process:
                     val_progress_bar.close()
-                if hasattr(self.val_dataloader, "end"):
-                    self.val_dataloader.end() # type: ignore
+                self.val_dataloader.end() # type: ignore
                 break
 
         avg_val_loss = torch.cat(val_loss_list).mean().item()
         action_l1_err_list = np.concatenate(action_l1_err_list, axis=0)  # (len_val_dataset*Ta, Da)
-        action_l1_err_list_denormed = self.maxmin.denormalize_L1_action_err( action_l1_err_list) # type: ignore
+        action_l1_err_list_denormed = (
+            self.maxmin.denormalize_L1_action_err(
+                action_l1_err_list
+            )
+        )
 
         # action L1 errors
         avg_action_errors_denormed = action_l1_err_list_denormed.mean(0)  # (Da,) NOTE only if the error is L1 (linear)
+        # Define dimension splits: hand_joints(14) + arm_joints(14) + rpy(3) + height(1) = 32
+        hand_joints_start, hand_joints_end = 0, 14
+        arm_joints_start, arm_joints_end = 14, 28
+        rpy_start, rpy_end = 28, 31
+        height_start, height_end = 31, 32
+        torso_vx_start, torso_vx_end = 32, 33
+        torso_vy_start, torso_vy_end = 33, 34
+        torso_vyaw_start, torso_vyaw_end = 34, 35
+        torso_dyaw_start, torso_dyaw_end = 35, 36
+    
         labels_denormed = [
-            "hand_left_l1",
-            "hand_right_l1",
-            "arm_left_l1",
-            "arm_right_l1",
+            "val/denorm_err_l1_hand_joints",
+            "val/denorm_err_l1_arm_joints",
+            "val/denorm_err_l1_rpy",
+            "val/denorm_err_l1_height",
+            "val/denorm_err_l1_torso_vx",
+            "val/denorm_err_l1_torso_vy",
+            "val/denorm_err_l1_torso_vyaw",
+            "val/denorm_err_l1_torso_target_yaw",
         ]
+    
         avg_lr_action_err_denormed = np.split(
-            avg_action_errors_denormed, [7, 14, 21], axis=-1
+            avg_action_errors_denormed, [hand_joints_end, arm_joints_end, rpy_end, height_end, torso_vx_end, torso_vy_end, torso_vyaw_end], axis=-1
         )
-        l1_action_errs = [
-            float(np.mean(x)) for x in avg_lr_action_err_denormed
-        ]
 
         # log metrics
         return {
             "loss": avg_val_loss,
-            **dict(zip(labels_denormed, l1_action_errs))
+            **dict(zip(labels_denormed, map(np.linalg.norm, avg_lr_action_err_denormed)))
         }
 
     def forward_and_loss(self, model, batch) -> dict[str, torch.Tensor]:
-        bsz, *_, h, w = batch["actions"].shape
-        # for debugging purposes
-        # gen = torch.Generator(device=self.device)
-        # gen.manual_seed(42)  # or any fixed seed you want
-        gen = None
+        bsz, Tp, Da = batch["actions"].shape
+
         if self.noise_scheduler_name == "ddpm":
             timesteps = torch.randint(
                 low=0, high=self.train_diffusion_steps, size=(bsz,), device=self.device
@@ -530,57 +526,68 @@ class PosttrainTrainer(Trainer):
 
         elif self.noise_scheduler_name == "flow":
             # TODO check how pi_0 does this ?
-            # For reproducibility/debugging
-            sigmas = torch.rand((bsz,), device=self.device, generator=gen).float()
-            # sigmas = torch.rand((bsz,), device=self.device).float()
+            sigmas = torch.rand((bsz,), device=self.device)
             timesteps = sigmas * self.train_diffusion_steps
-            sigmas = sigmas.view(-1, 1, 1)
-            # sigmas = sigmas.to(self.dtype)
+
+            if self.model_cfg.rtc:
+                delay = torch.randint(
+                    low=0,
+                    high=self.model_cfg.max_delay,
+                    size=(bsz,),
+                    device=self.device,
+                    dtype=torch.long
+                )
+                prefix_mask = torch.arange(Tp, device=self.device)[None, :] < delay[:, None]
+                sigmas = torch.where(
+                    prefix_mask,
+                    torch.tensor(0.0, device=self.device, dtype=sigmas.dtype),
+                    sigmas[:, None]
+                )
+                timesteps = sigmas * self.train_diffusion_steps
+
         else:
             raise ValueError(f"Unknown noise scheduler: {self.noise_scheduler_name}")
 
-        # noise_action = torch.randn_like(batch["actions"])
-        noise_action = torch.randn(batch["actions"].shape, device=self.device, generator=gen)
+        noise_action = torch.randn_like(batch["actions"])
         if self.noise_scheduler_name == "ddpm":
             noisy_actions = self.noise_scheduler.add_noise(
                 batch["actions"], noise_action, timesteps # type: ignore
             )
             target_action = noise_action  # ddpm epsilon-prediction
         elif self.noise_scheduler_name == "flow":
-            sigmas_action = sigmas.view(-1, 1, 1)  # B, Tp, action_dim # type: ignore
+            sigmas_action = sigmas  # type: ignore
+            while len(sigmas_action.shape) < len(batch["actions"].shape):
+                sigmas_action = sigmas_action.unsqueeze(-1)  # Expand to B, Tp, action_dim 
             noisy_actions = (1 - sigmas_action) * batch["actions"] + sigmas_action * noise_action
             target_action = noise_action - batch["actions"] # flow-matching velocity prediction
         else:
             raise ValueError
-        # print("L555", timesteps.dtype)
+
         model_output = model(
             input_ids=batch["input_ids"],#####
             attention_mask=batch["attention_mask"], # vlm related
             pixel_values=batch["pixel_values"],
             image_grid_thw=batch["image_grid_thw"], ####
-            action_samples=noisy_actions, # (B,Tp,Da)
+            action_samples=noisy_actions,  # (B,Tp,Da)
             states=batch["states"],  # (B,1,M)
             timestep=timesteps,
             traj2ds=batch["traj2ds"] if "traj2ds" in batch else None,  # (B, C, 3, H, W)
             return_dict=True,
         )
         action_pred = model_output.action
-        # actions_mask = batch["actions_mask"].to(torch.bool) if "actions_mask" in batch else torch.ones_like(batch["actions"]).to(torch.bool)
         loss_action = F.mse_loss(
-            # action_pred[actions_mask].float(), target_action[actions_mask].float(), # reduction="none"
             action_pred.float(), target_action.float(), reduction="none"
         )  # (B, Tp, Da)
+        """  
+            sum(1) -> to keep gradient consistent when training with different action chunks
+            mean(0) -> to average over the batch
+            sum() -> to sum over the weighted loss of each action dimension
+        """
+        mask = batch["actions_mask"].float() if "actions_mask" in batch else torch.ones_like(batch["actions"])
+        if self.model_cfg.rtc:
+            postfix_mask = (~prefix_mask)[:, :, None].float() # type: ignore  (B, Tp, 1)  
+            mask = mask * postfix_mask
         
-        # for post pre training, we only care about the overall loss
-        # print("L585", loss_action.mean().item())  # debug
-        # """  
-        #     sum(1) -> to keep gradient consistent when training with different action chunks
-        #     mean(0) -> to average over the batch
-        #     sum() -> to sum over the weighted loss of each action dimension
-        # """
-        if "actions_mask" not in batch:
-            batch["actions_mask"] = torch.ones_like(batch["actions"])
-        loss_action = (loss_action * batch["actions_mask"]).sum(1)  # (B, Da)
+        loss_action = (loss_action * mask).sum(1)  # (B, Da)
         loss_action = (loss_action.mean(0) * self.loss_w).sum()
-        # print(batch["dataset_name"][0], loss_action.item())  # debug
         return {"loss": loss_action}

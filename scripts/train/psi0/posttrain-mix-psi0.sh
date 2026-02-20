@@ -41,7 +41,7 @@ args="posttrain_mix_psi0_config \
 --data.use-delta-actions \
 --data.sampler=token_mixture \
 --data.tokens_per_device=8640 \
---data.he.root-dir=/hfm/data/HE_RAW \
+--data.he.root-dir=/hfm/data/HE_RAW_no_static \
 --data.he.ratio=0.5 \
 --data.egodex.root-dir=/hfm/data/egodex \
 --data.egodex.load-retarget \
@@ -52,12 +52,12 @@ args="posttrain_mix_psi0_config \
 --data.transform.repack.pad-action-dim=36 \
 --data.transform.repack.pad-state-dim=36 \
 --data.transform.repack.stage=postpre \
---data.transform.action-state.action_norm_type=bounds_q99 \
---data.transform.action-state.stat-path=assets/stats/he_raw_rel_stats_combined.json
---data.transform.action-state.no-normalize-state \
---data.transform.action-state.pad-action-dim=36 \
---data.transform.action-state.pad-state-dim=36 \
---data.transform.action-state.action-norm-type=bounds_q99 \
+--data.transform.field.action_norm_type=bounds_q99 \
+--data.transform.field.stat-path=assets/stats/he_raw_rel_stats_combined_no_static.json \
+--data.transform.field.no-normalize-state \
+--data.transform.field.pad-action-dim=36 \
+--data.transform.field.pad-state-dim=36 \
+--data.transform.field.action-norm-type=bounds_q99 \
 --data.transform.model.adaptive-resize \
 --data.transform.model.img-sizes.egodex 270 480 \
 --data.transform.model.img-sizes.he 240 320 \

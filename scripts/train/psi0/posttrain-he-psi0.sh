@@ -41,11 +41,11 @@ args="posttrain_he_psi0_config \
 --data.transform.repack.use-delta-actions \
 --data.transform.repack.pad-action-dim=36 \
 --data.transform.repack.pad-state-dim=36 \
---data.transform.action-state.action_norm_type=bounds_q99 \
---data.transform.action-state.stat-path=assets/stats/he_raw_rel_stats_combined_no_static.json
---data.transform.action-state.no-normalize-state \
---data.transform.action-state.pad-action-dim=36 \
---data.transform.action-state.pad-state-dim=36 \
+--data.transform.field.action_norm_type=bounds_q99 \
+--data.transform.field.stat-path=assets/stats/he_raw_rel_stats_combined_no_static.json
+--data.transform.field.no-normalize-state \
+--data.transform.field.pad-action-dim=36 \
+--data.transform.field.pad-state-dim=36 \
 --data.transform.model.resize.size 240 320 \
 --data.transform.model.center_crop.size 240 320 \
 --data.transform.model.no-img-aug \
