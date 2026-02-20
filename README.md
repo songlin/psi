@@ -48,6 +48,15 @@ start training
 bash scripts/train/psi0/finetune-simple-psi0-rtc.sh
 ```
 
+serve
+```
+uv run --active --group psi --group serve serve_psi0 \
+  --host 0.0.0.0 \
+  --port 22085 \
+  --run-dir=.runs/.runs/hfm-finetune/sim.bent-pick.simpl.flow1000.cosin.lr1.0e-04.b128.gpus4.2602060529 \
+  --ckpt-step=41999
+```
+
 ### Real-Robot
 
 ### Data Preprocessing

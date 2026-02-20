@@ -127,6 +127,18 @@ class ServerConfig(BaseModel):
         return self
         
 
+class DataConfig(BaseModel):
+    transform: DataTransform
+
+    def __call__(self, split: str = "train", transform_kwargs={}, **kwargs) -> Any:
+        raise NotImplementedError
+    
+class ModelConfig(BaseModel): 
+    ...
+
+class DummyModelConfig(ModelConfig):
+    # boilerplate model config
+    ...
 class LaunchConfig(BaseModel):
     # NOTE: This class is used for type hinting only!
     # The real implmentation is DynamicLaunchConfig .
@@ -183,9 +195,3 @@ class LaunchConfig(BaseModel):
 
         if self.timestamp is None:
             self.timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-
-class DataConfig(BaseModel):
-    transform: DataTransform
-
-    def __call__(self, split: str = "train", transform_kwargs={}, **kwargs) -> Any:
-        raise NotImplementedError

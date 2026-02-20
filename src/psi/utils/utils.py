@@ -14,6 +14,8 @@ import numpy as np
 import torch
 from PIL import Image
 from copy import deepcopy
+import tyro
+import sys
 
 def seed_everything(seed):
     # accelerator.set_seed(cfg.seed, device_specific=True) TODO preferr this way!
@@ -315,12 +317,6 @@ def extract_args_from_shell_script(script_path):
     return []
 
 def parse_args_to_tyro_config(args_or_script_path: Path | str, force_rewrite_config_file=False):
-    import tyro
-    import datetime
-    import sys
-    from psi.config.dynamic import dynamic_tyro_args, parse_data_config_args, create_dynamic_config_class
-    start = datetime.datetime.now()
-
     assert Path(args_or_script_path).exists(), f"Path does not exist: {args_or_script_path}"
 
     if str(args_or_script_path).endswith(".sh"):
@@ -336,21 +332,16 @@ def parse_args_to_tyro_config(args_or_script_path: Path | str, force_rewrite_con
     assert len(argv) > 1, "Please put all arguments in a spererate variable, eg., args=..."
     sys.argv = argv
 
-    # dynamic Parse tyro config (as opposed to static typo parsing which takes over 2 minutes)
-    dynamic_types, DataConfigClass, argv = dynamic_tyro_args(force_rewrite_config_file)
-    
-    # # parse data config seperately
-    args_data, argv = parse_data_config_args(argv)
-    # data_config = tyro.cli(DataConfigClass, config=(tyro.conf.ConsolidateSubcommandArgs,), args=args_data) #DataConfigClass
-    model_type = dynamic_types.get("model", "dummy")
+    try:
+        # By convention, the first argument after the script name is the config module name, 
+        # eg., {trainer}_{data}_{model}_config, which corresponds to psi.config.train.pretrain_egodex_qwen3vl_config
+        module = importlib.import_module(f"psi.config.train.{sys.argv[1]}")
+        DynamicLaunchConfigClass =  getattr(module, "DynamicLaunchConfig")
+        config = tyro.cli(DynamicLaunchConfigClass, config=(tyro.conf.ConsolidateSubcommandArgs,), args=sys.argv[2:])
+    except Exception as e:
+        print(f"Failed to import config module 'psi.config.train.{sys.argv[1]}'")
+        raise e
 
-    # create dynamic config class 
-    dynamicConfigClass = create_dynamic_config_class(model_type, DataConfigClass)
-    config = tyro.cli(dynamicConfigClass, config=(tyro.conf.ConsolidateSubcommandArgs,), args=argv[1:]+args_data) # type: ignore
-    # config.data = data_config
-
-    end = datetime.datetime.now()
-    print(f"Config parsing took {end - start}s")
     return config
 
 def batchify(data):

@@ -1,6 +1,6 @@
 from tyro.conf import subcommand as cmd
 from typing import Union, Annotated
-from psi.config.model import ModelConfig
+from psi.config.config import ModelConfig
 
 from .tokenizer import (
     FastActionTokenizerConfig, 

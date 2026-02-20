@@ -1,6 +1,6 @@
 from tyro.conf import subcommand as cmd
 from typing import Union, Annotated, Optional, List
-from psi.config.model import ModelConfig
+from psi.config.config import ModelConfig
 from pydantic import Field
 
 class Psi0ModelConfig(ModelConfig):

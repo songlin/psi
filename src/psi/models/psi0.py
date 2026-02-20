@@ -1557,7 +1557,7 @@ class Psi0Model(nn.Module):
             else:
                 assert False, "check here"
         model.action_header.load_state_dict(action_head_state_dict, strict=True)
-
+        overwatch.info("loaded action head checkpoint successfully.")
 
         # load necessary modules
         model.vlm_processor = AutoProcessor.from_pretrained(launch_config.model.model_name_or_path)
@@ -1584,10 +1584,8 @@ class Psi0Model(nn.Module):
             raise ValueError(f"Unsupported noise scheduler: {launch_config.model.noise_scheduler}")
 
         model.noise_scheduler = scheduler
-
         model.action_horizon = launch_config.model.action_chunk_size
         model.action_dim = launch_config.model.action_dim
-
         model.device = device
         return model
     
@@ -1722,7 +1720,7 @@ class Psi0Model(nn.Module):
                     model_output=model_pred, timestep=timestep, sample=action_samples # type: ignore
                 ).prev_sample
 
-        return action_samples
+        return action_samples.float()
 
     @torch.inference_mode()
     def predict_action_with_training_rtc_flow(
@@ -1849,7 +1847,7 @@ class Psi0Model(nn.Module):
                 # if i == len(self.noise_scheduler.timesteps) - 1:
                 #     action_samples = torch.where(prefix_mask[:, :, None], prev_actions, action_samples)
 
-        return action_samples
+        return action_samples.float()
 
     def predict_action_with_rtc_flow(
         self,
