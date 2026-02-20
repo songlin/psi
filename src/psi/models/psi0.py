@@ -23,7 +23,7 @@ from diffusers.models.attention_processor import Attention, JointAttnProcessor2_
 from diffusers.models.attention import FeedForward, _chunked_feed_forward
 # from dit_policy.data4robotics.models.diffusion import _TimeNetwork
 from psi.config.config import LaunchConfig
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, Qwen2TokenizerFast, Qwen3VLProcessor
+from transformers import Qwen3VLForConditionalGeneration, AutoConfig, AutoProcessor, Qwen2TokenizerFast, Qwen3VLProcessor
 from qwen_vl_utils import process_vision_info
 
 from psi.utils import initialize_overwatch, count_parameters
@@ -40,6 +40,8 @@ from transformers.models.dinov2 import Dinov2Model
 
 from diffusers.utils import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name  FIXME why this not works any more?
+
+QWEN3VL_VARIANT = "Qwen/Qwen3-VL-2B-Instruct"
 
 @dataclass
 class HumanFoundationModelOutput(BaseOutput):
@@ -1523,12 +1525,12 @@ class Psi0Model(nn.Module):
             raise ValueError(f"Checkpoint file {file_path} does not exist.")
         state_dict = load_file(file_path, device="cpu")
 
-        # load vlm backbone
-        vlm_model = Qwen3VLForConditionalGeneration.from_pretrained(
-            launch_config.model.model_name_or_path,
-            attn_implementation="flash_attention_2",
-            dtype=torch.bfloat16,
-        )
+        # init empty vlm backbone from config only (skip loading base pretrained weights)
+        vlm_config = AutoConfig.from_pretrained(QWEN3VL_VARIANT)
+        vlm_config._attn_implementation = "flash_attention_2"
+        vlm_model = Qwen3VLForConditionalGeneration(vlm_config)
+        vlm_model = vlm_model.to(dtype=torch.bfloat16) # type: ignore
+
         vlm_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith("action_header."):
@@ -1538,6 +1540,15 @@ class Psi0Model(nn.Module):
             else:
                 assert False, "check here"
         vlm_state_dict["lm_head.weight"] = vlm_state_dict["model.language_model.embed_tokens.weight"] # TODO check here
+
+        if vlm_state_dict["lm_head.weight"].shape[0] != vlm_model.lm_head.weight.shape[0]:
+            vlm_model.resize_token_embeddings(
+                vlm_state_dict["lm_head.weight"].shape[0], 
+                pad_to_multiple_of = 192,
+                mean_resizing = True
+            )
+            overwatch.info(f"Resized model token embeddings to {vlm_model.lm_head.weight.shape[0]}")
+
         vlm_model.load_state_dict(vlm_state_dict, strict=True)
         overwatch.info("loaded vlm_backbone checkpoint successfully.")
 
@@ -1560,7 +1571,7 @@ class Psi0Model(nn.Module):
         overwatch.info("loaded action head checkpoint successfully.")
 
         # load necessary modules
-        model.vlm_processor = AutoProcessor.from_pretrained(launch_config.model.model_name_or_path)
+        model.vlm_processor = AutoProcessor.from_pretrained(QWEN3VL_VARIANT)
         # model.tokenizer = model.vlm_processor.tokenizer
 
         if launch_config.model.noise_scheduler == "ddpm":

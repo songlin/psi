@@ -4,8 +4,7 @@
 
 Clone the project:
 ```bash
-git clone git@github.com:songlin/psi.git
-cd psi
+git clone git@github.com:songlin/psi.git && cd psi
 ```
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
@@ -23,7 +22,6 @@ GIT_LFS_SKIP_SMUDGE=1  uv sync --all-groups --index-strategy unsafe-best-match  
 
 Test installation:
 ```bash
-source .venv-psi/bin/activate
 python -c "import psi;print(psi.__version__)"
 ```
 a version number will be displayed.

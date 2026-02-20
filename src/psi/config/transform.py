@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import re
 import base64
 import copy
@@ -16,37 +17,9 @@ from PIL import Image
 from pydantic import BaseModel, Field, model_validator
 from torchvision.transforms import v2
 from psi.config.augmentation import *
-from psi.utils import get_asset_dir, pt_to_pil, resolve_path
+from psi.utils import get_asset_dir, pt_to_pil, resolve_path, pad_to_len
 
 IGNORE_INDEX = -100
-
-def pad_to_len(x, target_len, dim=1, pad_value=0.0):
-    """Pads a tensor to the target length along the specified dimension.
-    Args:
-        x: np.ndarray to pad
-        target_len: int, target length to pad to
-        dim: int, dimension along which to pad
-        pad_value: value to use for padding
-    Returns:
-        padded: np.ndarray, padded array
-        mask: np.ndarray of bool, True for original data, False for padded region
-    """
-    current_len = x.shape[dim]
-    if current_len >= target_len:
-        mask = np.ones(x.shape, dtype=bool)
-        return x, mask
-    pad_width = [(0, 0)] * x.ndim
-    pad_width[dim] = (0, target_len - current_len)
-    # np.pad pads as (before, after) for each axis
-    padded = np.pad(x, pad_width, mode='constant', constant_values=pad_value)
-    mask_shape = list(x.shape)
-    mask_shape[dim] = target_len
-    mask = np.ones(mask_shape, dtype=bool)
-    # Mark padded region as False (0)
-    idx = [slice(None)] * x.ndim
-    idx[dim] = slice(current_len, target_len)
-    mask[tuple(idx)] = False
-    return padded, mask
 
 class RepackTransform(BaseModel):
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
@@ -65,7 +38,7 @@ class DataTransform(BaseModel):
     model: ModelTransform
     field: FieldTransform
     
-    def __call__(self, data, **kwargs):
+    def __call__(self, data:dict[str, Any], **kwargs) -> dict[str, Any]:
         data = self.repack(data, **kwargs)
         data = self.field(data, **kwargs)
         data = self.model(data, **kwargs)
@@ -414,7 +387,6 @@ class SimpleRepackTransform(RepackTransform):
             "actions_mask": mask
         }
 
-
 class IdentityTransform(BaseModel):
     # boilerplate transform config
     # define primitive data types only! eg., int, float, str
@@ -458,6 +430,8 @@ class ActionStateTransform(FieldTransform):
     pad_state_dim: int | None = None
 
     def model_post_init(self, __context: Any) -> None:
+        if not os.path.exists(resolve_path(self.stat_path)):
+            return
         with open(resolve_path(self.stat_path), "r") as f:
             stat = json.load(f)
             

@@ -6,7 +6,7 @@ from pydantic import Field
 class Psi0ModelConfig(ModelConfig):
     ######################### hfm_action ############################
     # pretrained_model_name_or_path: str = "stabilityai/stable-diffusion-3-medium-diffusers"
-    resnet_store_path: str = "cache/checkpoints/resnet18/IN_1M_resnet18.pth"
+    resnet_store_path: str | None = None # = "cache/checkpoints/resnet18/IN_1M_resnet18.pth"
     pretrained_action_header_path: str | None = None
     # precomputed_text_encodings: str = "cache/precomputed_text_encodings.pkl"
     # ckpt_step: Optional[int] = None
@@ -97,5 +97,3 @@ class Psi0ModelConfig(ModelConfig):
     # lora_r: int = 8                          # [TrainingArguments] LoRA r
     # lora_alpha: int= 16                      # [TrainingArguments] LoRA alpha 
     # lora_dropout: float = 0.0                 # [TrainingArguments] LoRA dropout
-    
-    # action_tokenizer: BinActionTokenizerConfig

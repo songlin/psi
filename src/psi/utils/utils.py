@@ -379,3 +379,31 @@ def make_image_grid(images, nrows=None, ncols=None):
         row, col = divmod(i, ncols)
         grid.paste(image, box = (col * W, row * H))
     return grid
+
+def pad_to_len(x, target_len, dim=1, pad_value=0.0):
+    """Pads a tensor to the target length along the specified dimension.
+    Args:
+        x: np.ndarray to pad
+        target_len: int, target length to pad to
+        dim: int, dimension along which to pad
+        pad_value: value to use for padding
+    Returns:
+        padded: np.ndarray, padded array
+        mask: np.ndarray of bool, True for original data, False for padded region
+    """
+    current_len = x.shape[dim]
+    if current_len >= target_len:
+        mask = np.ones(x.shape, dtype=bool)
+        return x, mask
+    pad_width = [(0, 0)] * x.ndim
+    pad_width[dim] = (0, target_len - current_len)
+    # np.pad pads as (before, after) for each axis
+    padded = np.pad(x, pad_width, mode='constant', constant_values=pad_value)
+    mask_shape = list(x.shape)
+    mask_shape[dim] = target_len
+    mask = np.ones(mask_shape, dtype=bool)
+    # Mark padded region as False (0)
+    idx = [slice(None)] * x.ndim
+    idx[dim] = slice(current_len, target_len)
+    mask[tuple(idx)] = False
+    return padded, mask
