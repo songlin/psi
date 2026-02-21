@@ -368,7 +368,7 @@ def make_image_grid(images, nrows=None, ncols=None):
             if (nrows -1 ) * ncols >= num_images:
                 nrows -= 1
     elif nrows is None:
-        nrows = int(np.ceil(num_images / ncols))
+        nrows = int(np.ceil(num_images / (ncols or 1)))
     else:
         ncols = int(np.ceil(num_images / nrows))
     
@@ -376,7 +376,7 @@ def make_image_grid(images, nrows=None, ncols=None):
     grid = Image.new("RGB", size=(ncols * W, nrows * H))
 
     for i, image in enumerate(images):
-        row, col = divmod(i, ncols)
+        row, col = divmod(i, ncols or 1)
         grid.paste(image, box = (col * W, row * H))
     return grid
 

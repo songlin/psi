@@ -412,12 +412,8 @@ class FinetuneTrainer(Trainer):
     
     def save_checkpoint(self, global_step: int) -> str | None:
         save_path = os.path.join(self.project_dir, "checkpoints")
-        if not os.path.exists(f"{save_path}/ckpt_{global_step}"):
-            save_path = self.accelerator.save_state(f"{save_path}/ckpt_{global_step}")
-            return save_path
-        else:
-            overwatch.warning(f"Checkpoint {global_step} already exists, skipping save.")
-            return None
+        save_path = self.accelerator.save_state(f"{save_path}/ckpt_{global_step}")
+        return save_path
 
     def evaluate(self) -> dict[str, float] | None:
         accelerator = self.accelerator

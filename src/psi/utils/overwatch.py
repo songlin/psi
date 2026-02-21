@@ -118,7 +118,7 @@ class DistributedOverwatch:
     def world_size(self) -> int:
         return self._world_size
 
-    def warning_once(self, msg) -> int:
+    def warning_once(self, msg):
         if msg not in _warned_message:
             self.warning(msg)
             _warned_message.add(msg)
@@ -177,7 +177,7 @@ class PureOverwatch:
     def world_size() -> int:
         return 1
 
-    def warning_once(self, msg) -> int:
+    def warning_once(self, msg):
         if msg not in _warned_message:
             self.warning(msg)
             _warned_message.add(msg)

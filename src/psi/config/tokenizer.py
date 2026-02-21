@@ -4,10 +4,10 @@ from typing import Optional
 class ActionTokenizerConfig(BaseModel):
     ...
 
-class BinActionTokenizerConfig(ActionTokenizerConfig):
-    bins: int = 256
-    min_action: float = -1.0
-    max_action: float = 1.0
+# class BinActionTokenizerConfig(ActionTokenizerConfig):
+#     bins: int = 256
+#     min_action: float = -1.0
+#     max_action: float = 1.0
 
 
 # #### FSQModel

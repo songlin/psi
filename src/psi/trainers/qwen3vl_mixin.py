@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, List, cast
 import re
 import torch
@@ -5,11 +7,13 @@ import torch.nn as nn
 import numpy as np
 if TYPE_CHECKING:
     from psi.trainers import Trainer
+    from psi.config.model_psi0 import Psi0ModelConfig
+    from psi.config.model_qwen3vl import Qwen3VLModelConfig
 
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor, Qwen2TokenizerFast, Qwen3VLProcessor
 from accelerate import Accelerator
 from torch.nn.utils.rnn import pad_sequence
-from psi.config.tokenizer import BinActionTokenizerConfig
+# from psi.config.tokenizer import BinActionTokenizerConfig
 from psi.utils import initialize_overwatch #, shorten, seed_everything
 overwatch = initialize_overwatch(__name__)
 
@@ -188,7 +192,7 @@ class Qwen3vlMixin:
     def init_qwen3vl_models(self):
         trainer = cast("Trainer", self)
 
-        model_cfg = trainer.cfg.model 
+        model_cfg: Qwen3VLModelConfig = trainer.cfg.model  # type: ignore
         overwatch.info(f"Loading pretrained from {model_cfg.model_name_or_path}")
 
         try:
@@ -247,11 +251,11 @@ class Qwen3vlMixin:
             if model_cfg.tune_mm_llm:
                 for n, p in self.model.language_model.named_parameters():
                     p.requires_grad = True
-                self.model.lm_head.requires_grad = True
+                self.model.lm_head.requires_grad = True # type:ignore
             else:
                 for n, p in self.model.language_model.named_parameters():
                     p.requires_grad = False
-                self.model.lm_head.requires_grad = False
+                self.model.lm_head.requires_grad = False # type:ignore
     
     def prepare_qwen3vl(self, accelerator: Accelerator):
         trainer = cast("Trainer", self)
@@ -261,7 +265,7 @@ class Qwen3vlMixin:
 
         if trainer.train_cfg.data_parallel == "deepspeed":
             # Gradient Checkpoint Setup
-            if trainer.model_cfg.gradient_checkpointing:
+            if trainer.model_cfg.gradient_checkpointing: # type: ignore
                 assert "DeepSpeedEngine" in trainer.model.__class__.__name__, "deepspeed is not properly initialized!"
                 if hasattr(trainer.model, "enable_input_require_grads"): 
                     trainer.model.enable_input_require_grads()
@@ -270,7 +274,7 @@ class Qwen3vlMixin:
                         output.requires_grad_(True)
                     trainer.model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
         
-        if self.cfg.train.overfit_single_batch:
+        if trainer.cfg.train.overfit_single_batch:
             overwatch.warning("Overfitting a single batch: reusing first batch every step. set cfg.data.image_aug = False for true memorization.")
             first_batch = next(iter(self.train_dataloader))
             class SingleBatchLoader:
@@ -286,15 +290,17 @@ class Qwen3vlMixin:
 
 
     def create_qwen3vl_optimizer(self):
-        # trainer = cast("Trainer", self)
+        trainer = cast("Trainer", self)
         opt_model = self.model
         decay_parameters = self.get_decay_parameter_names(opt_model)
         decay_parameters = [name for name in decay_parameters if "bias" not in name]
-        if self.model_cfg.mm_projector_lr is not None and self.model_cfg.mm_projector_lr != 0:
+
+        model_cfg: Qwen3VLModelConfig | Psi0ModelConfig = trainer.cfg.model  # type: ignore
+        if model_cfg.mm_projector_lr is not None and model_cfg.mm_projector_lr != 0:
             projector_parameters = [
                 name for name, _ in opt_model.named_parameters() if "merger" in name
             ]
-            if self.model_cfg.vision_tower_lr is not None and self.model_cfg.vision_tower_lr != 0:
+            if model_cfg.vision_tower_lr is not None and model_cfg.vision_tower_lr != 0:
                 vision_tower_parameters = [
                     name for name, _ in opt_model.named_parameters() if "visual" in name
                 ]
@@ -310,7 +316,7 @@ class Qwen3vlMixin:
                                 and p.requires_grad
                             )
                         ],
-                        "weight_decay": self.model_cfg.weight_decay,
+                        "weight_decay": model_cfg.weight_decay,
                     },
                     {
                         "params": [
@@ -323,8 +329,8 @@ class Qwen3vlMixin:
                                 and p.requires_grad
                             )
                         ],
-                        "weight_decay": self.model_cfg.weight_decay,
-                        "lr": self.model_cfg.vision_tower_lr,
+                        "weight_decay": model_cfg.weight_decay,
+                        "lr": model_cfg.vision_tower_lr,
                     },
                     {
                         "params": [
@@ -351,7 +357,7 @@ class Qwen3vlMixin:
                             )
                         ],
                         "weight_decay": 0.0,
-                        "lr": self.model_cfg.vision_tower_lr,
+                        "lr": model_cfg.vision_tower_lr,
                     },
                     {
                         "params": [
@@ -363,8 +369,8 @@ class Qwen3vlMixin:
                                 and p.requires_grad
                             )
                         ],
-                        "weight_decay": self.model_cfg.weight_decay,
-                        "lr": self.model_cfg.mm_projector_lr,
+                        "weight_decay": model_cfg.weight_decay,
+                        "lr": model_cfg.mm_projector_lr,
                     },
                     {
                         "params": [
@@ -377,7 +383,7 @@ class Qwen3vlMixin:
                             )
                         ],
                         "weight_decay": 0.0,
-                        "lr": self.model_cfg.mm_projector_lr,
+                        "lr": model_cfg.mm_projector_lr,
                     },
                 ]
             else:
@@ -392,7 +398,7 @@ class Qwen3vlMixin:
                                 and p.requires_grad
                             )
                         ],
-                        "weight_decay": self.model_cfg.weight_decay,
+                        "weight_decay": model_cfg.weight_decay,
                     },
                     {
                         "params": [
@@ -416,8 +422,8 @@ class Qwen3vlMixin:
                                 and p.requires_grad
                             )
                         ],
-                        "weight_decay": self.model_cfg.weight_decay,
-                        "lr": self.model_cfg.mm_projector_lr,
+                        "weight_decay": model_cfg.weight_decay,
+                        "lr": model_cfg.mm_projector_lr,
                     },
                     {
                         "params": [
@@ -430,7 +436,7 @@ class Qwen3vlMixin:
                             )
                         ],
                         "weight_decay": 0.0,
-                        "lr": self.model_cfg.mm_projector_lr,
+                        "lr": model_cfg.mm_projector_lr,
                     },
                 ]
         else:
@@ -441,7 +447,7 @@ class Qwen3vlMixin:
                         for n, p in opt_model.named_parameters()
                         if (n in decay_parameters and p.requires_grad)
                     ],
-                    "weight_decay": self.model_cfg.weight_decay,
+                    "weight_decay": model_cfg.weight_decay,
                 },
                 {
                     "params": [

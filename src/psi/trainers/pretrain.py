@@ -217,17 +217,9 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         
         action_preds = output.logits.detach()[:, :-1, :].argmax(dim=2)
         action_gt = batch["labels"][:, 1:].to(action_preds.device)
-        if isinstance(self.model_cfg.action_tokenizer, FastActionTokenizerConfig) or \
-            isinstance(self.model_cfg.action_tokenizer, VQActionTokenizerConfig):
+        if isinstance(self.model_cfg.action_tokenizer, FastActionTokenizerConfig):
             mask_start = self.action_tokenizer.action_token_begin_idx
             mask = (action_gt >= mask_start) & (action_gt < mask_start +  self.action_tokenizer.n_bins) # mask to get only action tokens
-        elif isinstance(self.model_cfg.action_tokenizer, TextActionTokenizerConfig):
-            start_mask = action_gt == self.action_tokenizer.action_token_begin_idx
-            end_mask = action_gt == self.action_tokenizer.action_token_end_idx
-            start_int = start_mask.int()
-            end_int = end_mask.int()
-            mask_state = torch.cumsum(start_int, dim=1) - torch.cumsum(end_int, dim=1) >= 1    
-            mask = mask_state | start_mask | end_mask
         else:
             raise NotImplementedError
 
@@ -235,18 +227,14 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         correct = (action_preds == action_gt) & mask
         action_accuracy = correct.sum().float() / mask.sum().float()
 
-        if isinstance(self.model_cfg.action_tokenizer, FastActionTokenizerConfig) or \
-            isinstance(self.model_cfg.action_tokenizer, TextActionTokenizerConfig):
+        if isinstance(self.model_cfg.action_tokenizer, FastActionTokenizerConfig):
             action_gt_token_ids: list[list[int]] = [
                 a[m].tolist() for a, m in zip(action_gt, mask)
             ]
             action_preds_token_ids: list[list[int]] = [
                 a[m].tolist() for a, m in zip(action_preds, mask)
             ]
-        elif isinstance(self.model_cfg.action_tokenizer, VQActionTokenizerConfig):
-            action_preds_token_ids = action_preds[mask].cpu().numpy() # type: ignore
-            action_gt_token_ids = action_gt[mask].cpu().numpy() # type: ignore
-        
+
         continuous_actions_pred = torch.tensor(
             self.action_tokenizer.decode_token_ids_to_actions(action_preds_token_ids), # type: ignore
             dtype=torch.float32
@@ -293,7 +281,7 @@ class PretrainTrainer(Qwen3vlMixin, Trainer):
         }); exit(0) """
 
         return self.accelerator.sync_gradients, {
-            "loss": loss.item(),
+            "loss": loss.item(), # type:ignore
             "action_accuracy": action_accuracy.item(),
             "action_l1_loss": action_l1_loss.item(),
             "lr": self.lr_scheduler.get_last_lr()[0],

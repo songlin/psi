@@ -1648,7 +1648,7 @@ class Psi0Model(nn.Module):
         num_inference_steps: int,
         traj2ds, 
         **kwargs: str
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
 
         bsz = states.shape[0]
         batch_input_ids = []
@@ -1745,7 +1745,7 @@ class Psi0Model(nn.Module):
         inference_delay: int = 0,
         max_delay: int = 0,
         **kwargs: str
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
 
         ## RTC related ##
         H = self.action_horizon

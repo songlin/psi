@@ -76,8 +76,7 @@ def _initialize_accelerator(trainer: Trainer) -> Accelerator:
         # with batch_size attribute returning an integer value or alternatively 
         # set an integer value in train_micro_batch_size_per_gpu 
         # in the deepspeed config file or assign integer value to
-        accelerator.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = \
-            trainer.device_train_batch_size # type: ignore
+        accelerator.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = trainer.device_train_batch_size # type: ignore
 
     # Initialize the trackers unless in eval or debug mode
     if overwatch.is_rank_zero() and not trainer.cfg.eval:
