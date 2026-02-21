@@ -9,10 +9,13 @@ NPROC_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 ulimit -n 65535
 echo "Training with $NPROC_PER_NODE GPUs"
 
+export exp=bent-pick
+export task=G1WholebodyBendPick-v0-psi0
+
 args="
 finetune_simple_psi0_config \
 --seed=292285 \
---exp=sim.bent-pick-50hz.rtc \
+--exp=$exp \
 --train.name=finetune \
 --train.data_parallel=ddp \
 --train.mixed_precision=bf16 \
@@ -32,12 +35,12 @@ finetune_simple_psi0_config \
 --train.lr_scheduler_kwargs.betas 0.95 0.999 \
 --log.report_to=wandb \
 --data.root_dir=/hfm/data/simple \
---data.train-repo-ids=G1WholebodyBendPick-v0-psi0 \
+--data.train-repo-ids=$task \
 --data.video-backend=torchvision_av \
 --data.transform.repack.action-chunk-size=30 \
 --data.transform.repack.pad-action-dim=36 \
 --data.transform.repack.pad-state-dim=36 \
---data.transform.field.stat-path=/hfm/data/simple/G1WholebodyBendPick-v0-psi0/meta/stats_psi0.json \
+--data.transform.field.stat-path=meta/stats_psi0.json \
 --data.transform.field.stat-action-key=action \
 --data.transform.field.stat-state-key=states \
 --data.transform.field.action_norm_type=bounds \

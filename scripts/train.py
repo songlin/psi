@@ -359,7 +359,7 @@ if __name__ == "__main__":
         # By convention, the first argument after the script name is the config module name, 
         # eg., {trainer}_{data}_{model}_config, which corresponds to psi.config.train.pretrain_egodex_qwen3vl_config
         module = importlib.import_module(f"psi.config.train.{sys.argv[1]}")
-        DynamicLaunchConfigClass =  getattr(module, "DynamicLaunchConfig")
+        DynamicLaunchConfigClass = getattr(module, "DynamicLaunchConfig")
         config = tyro.cli(DynamicLaunchConfigClass, config=(tyro.conf.ConsolidateSubcommandArgs,), args=sys.argv[2:])
     except Exception as e:
         overwatch.error(f"Failed to import config module 'psi.config.train.{sys.argv[1]}'")
@@ -367,9 +367,4 @@ if __name__ == "__main__":
 
     end = datetime.datetime.now()
     overwatch.info(f"Config parsing took {(end - start).total_seconds():.2f}s") 
-
-    # with open(f"run_config.json", "w") as f:
-    #     f.write(config.model_dump_json(indent=4))
-    # exit(0)
-    
     train(config) # type: ignore

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export OMP_NUM_THREADS=32
-export CUDA_VISIBLE_DEVICES=0 #,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 source .venv-psi/bin/activate
 
@@ -9,15 +9,18 @@ NPROC_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 ulimit -n 65535
 echo "Training with $NPROC_PER_NODE GPUs"
 
+export exp=pick-toys
+export task=Pick_toys_into_box_and_lift_and_turn_and_put_on_the_chair_new_target_yaw
+
 args="
     finetune_real_psi0_config \
     --seed=292285 \
     --no-auto-tag-run \
-    --exp=real \
+    --exp=$exp \
     --train.name=finetune \
     --train.data_parallel=ddp \
     --train.mixed_precision=bf16 \
-    --train.train_batch_size=32 \
+    --train.train_batch_size=16 \
     --train.max_checkpoints_to_keep=5 \
     --train.gradient_accumulation_steps=1 \
     --train.learning_rate=1e-4 \
@@ -32,11 +35,11 @@ args="
     --train.lr_scheduler_kwargs.weight_decay=1e-6 \
     --train.lr_scheduler_kwargs.betas 0.95 0.999 \
     --log.report_to=wandb \
-    --data.root_dir=/hfm/data/real_teleop_g1/lerobot/ \
-    --data.train_repo_ids=Pick_toys_into_box_and_lift_and_turn_and_put_on_the_chair_new_target_yaw \
+    --data.root_dir=real_teleop_g1/lerobot \
+    --data.train_repo_ids=$task \
     --data.transform.repack.pad-action-dim=36 \
     --data.transform.repack.pad-state-dim=36 \
-    --data.transform.field.stat-path=/hfm/songlin/we_learn/src/we/assets/dataset_statistics/g1-stats-put-toys-box-lift-put-chair.json \
+    --data.transform.field.stat-path=meta/stats_psi0.json \
     --data.transform.field.stat-action-key=action \
     --data.transform.field.stat-state-key=states \
     --data.transform.field.action_norm_type=bounds \
@@ -47,7 +50,7 @@ args="
     --data.transform.model.img-aug \
     --data.transform.model.resize.size 240 320 \
     --data.transform.model.center_crop.size 240 320 \
-    --model.model_name_or_path=/hfm/cache/checkpoints/hfm.pre.fast.egodex.2512241941.ckpt200k \
+    --model.model_name_or_path=/hfm/cache/checkpoints/hfm.pre.fast.mixed.1by1.2601091803.ckpt30k \
     --model.pretrained-action-header-path=/hfm/cache/checkpoints/postpre.1by130k.pad36.mixed.2601131206.ckpt34k \
     --model.noise-scheduler=flow \
     --model.train-diffusion-steps=1000 \

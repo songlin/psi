@@ -478,20 +478,22 @@ class ActionStateTransform(FieldTransform):
         if not os.path.exists(resolve_path(self.stat_path)):
             return
         with open(resolve_path(self.stat_path), "r") as f:
-            stat = json.load(f)
-            
+            stats = json.load(f)
+            self.populate_stats(stats)
+        
+    def populate_stats(self, stats: dict[str, Any]):
         if self.action_norm_type == "bounds_q99":
-            self.action_min = stat[self.stat_action_key]["q01"]
-            self.action_max = stat[self.stat_action_key]["q99"]
+            self.action_min = stats[self.stat_action_key]["q01"]
+            self.action_max = stats[self.stat_action_key]["q99"]
             if self.normalize_state:
-                self.state_min = stat[self.stat_state_key]["q01"]
-                self.state_max = stat[self.stat_state_key]["q99"]
+                self.state_min = stats[self.stat_state_key]["q01"]
+                self.state_max = stats[self.stat_state_key]["q99"]
         elif self.action_norm_type == "bounds":
-            self.action_min = stat[self.stat_action_key]["min"]
-            self.action_max = stat[self.stat_action_key]["max"]
+            self.action_min = stats[self.stat_action_key]["min"]
+            self.action_max = stats[self.stat_action_key]["max"]
             if self.normalize_state:
-                self.state_min = stat[self.stat_state_key]["min"]
-                self.state_max = stat[self.stat_state_key]["max"]
+                self.state_min = stats[self.stat_state_key]["min"]
+                self.state_max = stats[self.stat_state_key]["max"]
         else:
             raise ValueError(f"Unsupported action normalization type: {self.action_norm_type}")
 

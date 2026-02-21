@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 import torch
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, MultiLeRobotDataset
 from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata
+from psi.utils import resolve_path
 
 class LeRobotDatasetWrapper(torch.utils.data.Dataset):
     """ A wrapper around LeRobotDataset to support multiple datasets.
@@ -19,7 +20,7 @@ class LeRobotDatasetWrapper(torch.utils.data.Dataset):
     ):
         repo_ids = data_cfg.train_repo_ids if split == "train" else data_cfg.val_repo_ids
         first_repo = repo_ids[0] if isinstance(repo_ids, list) else repo_ids
-        dataset_meta = LeRobotDatasetMetadata(first_repo, f"{data_cfg.root_dir}/{first_repo}")
+        dataset_meta = LeRobotDatasetMetadata(first_repo, resolve_path(f"{data_cfg.root_dir}/{first_repo}"))
         delta_timestamps = data_cfg.transform.repack.delta_timestamps(dataset_meta.fps)# type: ignore
 
         if len(repo_ids) > 1:
@@ -27,7 +28,7 @@ class LeRobotDatasetWrapper(torch.utils.data.Dataset):
             lerobot_dataset_class = MultiLeRobotDataset
         else:
             repo_ids = first_repo
-            root_dir = f"{data_cfg.root_dir}/{first_repo}"
+            root_dir = resolve_path(f"{data_cfg.root_dir}/{first_repo}")
             lerobot_dataset_class = LeRobotDataset
 
         self.base_dataset = lerobot_dataset_class(
