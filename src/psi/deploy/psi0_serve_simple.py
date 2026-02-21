@@ -94,6 +94,7 @@ class Server:
                 request.image, request.instruction, request.history, request.state, request.gt_action, request.dataset_name
             
             overwatch.info(f"Instruction: {instruction}")
+            overwatch.info(f"history_dict: {history_dict}")
 
             transforms = [self.model_transform.resize(), self.model_transform.center_crop()]
             t = v2.Compose(transforms)
@@ -120,8 +121,8 @@ class Server:
                 )
             else: # rtc
                 current_time = time.monotonic()
-                if self.previous_action is None or (current_time - self.last_serve_time) > 30: # if idle more than 60s, reset previous action
-                    overwatch.info("Reset or first step, using normal inference")
+                if self.previous_action is None or history_dict is not None: #  or (current_time - self.last_serve_time) > 30  #if idle more than 60s, reset previous action
+                    overwatch.info("===Reset or first step, without condition===")
                     raw_pred_actions = self.model.predict_action(
                         observations=[[t(Image.fromarray(img)) for img in image_dict.values()]], 
                         states=states.unsqueeze(0), # B, To, Ds
@@ -196,11 +197,13 @@ def serve(cfg: ServerConfig) -> None:
 def main():
     overwatch.info("Start Serving from uv")
     overwatch.info(f"Args: {sys.argv}")
+    from dotenv import load_dotenv
+    assert load_dotenv() 
     config = tyro.cli(ServerConfig, config=(tyro.conf.ConsolidateSubcommandArgs,), args=sys.argv[1:])
     serve(config)
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
-    load_dotenv()  # take environment variables from .env file
+    assert load_dotenv()
     config = tyro.cli(ServerConfig, config=(tyro.conf.ConsolidateSubcommandArgs,))
     serve(config)

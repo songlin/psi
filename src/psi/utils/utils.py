@@ -159,15 +159,18 @@ def get_we_dir():
     #     return Path(os.environ["WE_HOME"]) / "runs"
     return (resources.files(__package__.split('.')[0]) / ".." / ".." ).resolve()  # type: ignore
 
-def resolve_path(path: Union[str, Path], auto_download=False) -> Path:
+def resolve_data_path(path: Union[str, Path], auto_download=False) -> Path:
+    return resolve_path(path, subdir="data", auto_download=auto_download)
+
+def resolve_path(path: Union[str, Path], subdir="data", auto_download=False) -> Path:
     if Path(path).absolute().exists():
        return Path(path).absolute()
     if "PSI_HOME" in os.environ:
         proj_dir = Path(os.environ["PSI_HOME"])
-        filepath = proj_dir / path
+        filepath = proj_dir / subdir / path
         if filepath.exists():
             return filepath
-    if "DATA_HOME" in os.environ:
+    if "DATA_HOME" in os.environ and subdir == "data":
         data_dir = Path(os.environ["DATA_HOME"])
         filepath = data_dir / path
         if filepath.exists():

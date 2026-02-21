@@ -2,7 +2,8 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Any, Optional, Dict, List, TYPE_CHECKING
 from psi.config.config import DataConfig
 from pathlib import Path
-from psi.utils import resolve_path
+from psi.utils import resolve_data_path
+import os
 import json
 
 from psi.config.transform import ActionStateTransform
@@ -27,9 +28,12 @@ class LerobotDataConfig(DataConfig):
             not Path(self.transform.field.stat_path).is_absolute() and 
             self.transform.field.action_max is None
         ):
-            with open(resolve_path(
-                Path(self.root_dir) / self.train_repo_ids[0] / self.transform.field.stat_path), "r"
-            ) as f:
+            fpath = resolve_data_path(
+                Path(self.root_dir) / self.train_repo_ids[0] / self.transform.field.stat_path
+            )
+            if not os.path.exists(fpath):
+                return self
+            with open(fpath, "r") as f:
                 stats = json.load(f)
                 self.transform.field.populate_stats(stats)
         return self
