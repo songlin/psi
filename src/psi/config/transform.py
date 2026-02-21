@@ -25,6 +25,11 @@ class RepackTransform(BaseModel):
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return data
 
+class LerobotRepackTransform(RepackTransform):
+
+    def delta_timestamps(self, fps: int) -> dict[str, list[float]]:
+        ...  
+
 class ModelTransform(BaseModel):
     def __call__(self, data: dict[str, Any], no_aug: bool = False, **kwargs) -> dict[str, Any]:
         return data
@@ -351,7 +356,7 @@ class RealRepackTransform(RepackTransform):
         } 
         return result
 
-class SimpleRepackTransform(RepackTransform):
+class SimpleRepackTransform(LerobotRepackTransform):
     dataset_name: str = "simple"
 
     num_past_frames: int = 0 # single current frame
