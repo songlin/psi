@@ -183,12 +183,12 @@ class HEPretrainRepackTransform(RepackTransform):
             right_rot_pad = None
 
         left_wrist = (
-            np.concatenate([left_wrist_xyz, left_wrist_rpy, left_rot_pad], axis=1)
+            np.concatenate([left_wrist_xyz, left_wrist_rpy, left_rot_pad], axis=1) #type:ignore
             if self.use_delta_actions
             else np.concatenate([left_wrist_xyz, left_wrist_rpy], axis=1)
         )
         right_wrist = (
-            np.concatenate([right_wrist_xyz, right_wrist_rpy, right_rot_pad], axis=1)
+            np.concatenate([right_wrist_xyz, right_wrist_rpy, right_rot_pad], axis=1) #type:ignore
             if self.use_delta_actions
             else np.concatenate([right_wrist_xyz, right_wrist_rpy], axis=1)
         )
@@ -311,7 +311,7 @@ class HEPretrainRepackTransform(RepackTransform):
             delta[key] = [t / fps for t in range(action_len)]
         return delta
 
-class RealRepackTransform(RepackTransform):
+class RealRepackTransform(LerobotRepackTransform):
     dataset_name: str = "real"
 
     conditions: list[str] = Field(default_factory=lambda: [])
