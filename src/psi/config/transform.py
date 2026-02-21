@@ -446,13 +446,13 @@ class IdentityTransform(BaseModel):
     def __call__(self, data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return data
 
-    def denormalize_L1_action_err(self, L1_err):
-        """return denormalized L1 err loss"""
-        return L1_err
+    # def denormalize_L1_action_err(self, L1_err):
+    #     """return denormalized L1 err loss"""
+    #     return L1_err
     
-    def denormalize(self, normalized: dict) -> dict:
-        """ Denormalize the action. """
-        return normalized
+    # def denormalize(self, normalized: dict) -> dict:
+    #     """ Denormalize the action. """
+    #     return normalized
 
 class ActionStateTransform(FieldTransform):
     

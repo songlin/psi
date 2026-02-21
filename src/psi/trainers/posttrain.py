@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from psi.config.model_psi0 import Psi0ModelConfig
     from psi.config.transform import Psi0ModelTransform
     from psi.config.data_he import HERawDataConfig
-    from psi.config.data_mix import MixedDataConfig
+
+from psi.config.data_mix import MixedDataConfig
 
 from accelerate import Accelerator
 
@@ -201,7 +202,8 @@ class PosttrainTrainer(Trainer):
     def create_dataloaders(self, train_dataset, val_dataset):
         from psi.data.dataset import MixtureDataset
         
-        if isinstance(self.train_dataset, MixtureDataset):
+        if isinstance(self.data_cfg, MixedDataConfig):
+            assert isinstance(self.train_dataset, MixtureDataset)
             if self.data_cfg.sampler == "batch_mixture":
                 from psi.data.sampler import BatchMixtureSampler
                 batch_sampler = BatchMixtureSampler(
@@ -256,7 +258,7 @@ class PosttrainTrainer(Trainer):
                 num_workers=1,
                 worker_init_fn=worker_init_fn,
                 persistent_workers=True,
-                drop_last=drop_last #
+                drop_last=drop_last or False
             )
 
         val_dataloader_kwargs = {
@@ -293,7 +295,7 @@ class PosttrainTrainer(Trainer):
         # self.model.action_header.to(torch.float32) # HACK keep action header in fp32
         # print("L307", self.model.module.action_header.time_ins_embed.out_net[0].weight.dtype) # debug
 
-        if not (hasattr(self.data_cfg, "sampler") and self.data_cfg.sampler is not None) :
+        if not (isinstance(self.data_cfg, MixedDataConfig) and self.data_cfg.sampler is not None):
             # dont prepare dataloader for mixed dataset as custom sampler is used
             self.train_dataloader = accelerator.prepare(self.train_dataloader)
 
@@ -384,8 +386,7 @@ class PosttrainTrainer(Trainer):
             concat_img = np.concatenate(img_arrays, axis=1)
             wandb.log({"raw_images": [wandb.Image(concat_img, caption=f"raw images {self.global_step}")]}, step=self.global_step)
 
-        # self.train_loss_tracker = step_loss = losses["loss"].detach().item()
-        self.train_loss_tracker = step_loss = self.accelerator.gather(losses["loss"]).mean().item()
+        self.train_loss_tracker = step_loss = self.accelerator.gather(losses["loss"]).mean().item() # type: ignore
 
         return (self.accelerator.sync_gradients, {
             "lr_act": self.lr, 
@@ -424,7 +425,7 @@ class PosttrainTrainer(Trainer):
 
             action_samples = self.noise_scheduler.step(
                 model_output=model_pred, timestep=timestep, sample=action_samples # type: ignore
-            ).prev_sample
+            ).prev_sample # type: ignore
 
         return action_samples
     

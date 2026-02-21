@@ -112,7 +112,7 @@ class RMSNorm(nn.Module):
 
 
 if torch.__version__ >= "2.1.0":
-    LayerNorm = nn.LayerNorm
+    LayerNorm = nn.LayerNorm # type:ignore
 else:
     # Has optional bias parameter compared to torch layer norm
     # TODO: replace with torch layernorm once min required torch version >= 2.1

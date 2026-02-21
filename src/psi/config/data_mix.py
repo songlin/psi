@@ -66,9 +66,6 @@ class MixedDataConfig(DataConfig):
         )
         he_dataset = MapStyleDataset(self, he, transform_kwargs=transform_kwargs, **kwargs)
 
-        # from torch.utils.data import ConcatDataset
-        # mixed_dataset = ConcatDataset([egodex_dataset, he_dataset])
-
         mixed_dataset = MixtureDataset({
             egodex_dataset: self.egodex["ratio"],
             he_dataset: self.he["ratio"],
