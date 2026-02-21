@@ -121,7 +121,7 @@ class Server:
                 )
             else: # rtc
                 current_time = time.monotonic()
-                if self.previous_action is None or history_dict is not None: #  or (current_time - self.last_serve_time) > 30  #if idle more than 60s, reset previous action
+                if self.previous_action is None or "reset" in history_dict: #  or (current_time - self.last_serve_time) > 30  #if idle more than 60s, reset previous action
                     overwatch.info("===Reset or first step, without condition===")
                     raw_pred_actions = self.model.predict_action(
                         observations=[[t(Image.fromarray(img)) for img in image_dict.values()]], 
