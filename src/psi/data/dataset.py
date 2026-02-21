@@ -2,7 +2,9 @@ from __future__ import annotations
 from typing import Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from psi.config.data import DataConfig
+    from psi.config.config import DataConfig
+    from psi.data.sampler import DatasetSpec
+
 
 from collections.abc import Iterator, Sized
 import torch
@@ -58,6 +60,9 @@ class IterableDataset(torch.utils.data.IterableDataset):
 
 
 class MixtureDataset(TorchDataset):
+
+    specs: list[DatasetSpec]
+    
     def __init__(self, datasets: dict[Dataset|IterableDataset, float], num_samples_per_epoch: int) -> None:
         self.datasets = list(datasets.keys())
         self.ratios = list(datasets.values())

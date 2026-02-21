@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from psi.config.config import DataConfig
+
 class HERawDataConfig(DataConfig):
     root_dir: str
     robot_type: str = "both"

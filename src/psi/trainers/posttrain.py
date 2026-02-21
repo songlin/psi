@@ -530,13 +530,10 @@ class PosttrainTrainer(Trainer):
             ).long()
 
         elif self.noise_scheduler_name == "flow":
-            # TODO check how pi_0 does this ?
             # For reproducibility/debugging
             sigmas = torch.rand((bsz,), device=self.device, generator=gen).float()
-            # sigmas = torch.rand((bsz,), device=self.device).float()
             timesteps = sigmas * self.train_diffusion_steps
             sigmas = sigmas.view(-1, 1, 1)
-            # sigmas = sigmas.to(self.dtype)
         else:
             raise ValueError(f"Unknown noise scheduler: {self.noise_scheduler_name}")
 
@@ -553,7 +550,7 @@ class PosttrainTrainer(Trainer):
             target_action = noise_action - batch["actions"] # flow-matching velocity prediction
         else:
             raise ValueError
-        # print("L555", timesteps.dtype)
+        
         model_output = model(
             input_ids=batch["input_ids"],#####
             attention_mask=batch["attention_mask"], # vlm related
@@ -566,14 +563,11 @@ class PosttrainTrainer(Trainer):
             return_dict=True,
         )
         action_pred = model_output.action
-        # actions_mask = batch["actions_mask"].to(torch.bool) if "actions_mask" in batch else torch.ones_like(batch["actions"]).to(torch.bool)
         loss_action = F.mse_loss(
-            # action_pred[actions_mask].float(), target_action[actions_mask].float(), # reduction="none"
             action_pred.float(), target_action.float(), reduction="none"
         )  # (B, Tp, Da)
         
         # for post pre training, we only care about the overall loss
-        # print("L585", loss_action.mean().item())  # debug
         # """  
         #     sum(1) -> to keep gradient consistent when training with different action chunks
         #     mean(0) -> to average over the batch
@@ -583,5 +577,4 @@ class PosttrainTrainer(Trainer):
             batch["actions_mask"] = torch.ones_like(batch["actions"])
         loss_action = (loss_action * batch["actions_mask"]).sum(1)  # (B, Da)
         loss_action = (loss_action.mean(0) * self.loss_w).sum()
-        # print(batch["dataset_name"][0], loss_action.item())  # debug
         return {"loss": loss_action}
