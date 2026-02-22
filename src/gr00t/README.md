@@ -16,3 +16,7 @@ cd src/gr00t
 cd src/gr00t
 ./scripts/openloop_eval.sh
 ```
+# TODOs
+- [ ] rename
+- [ ] simple conversion/training
+- [ ] simple deployment
